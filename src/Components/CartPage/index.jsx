@@ -18,7 +18,7 @@ export function CartDrawer() {
     const fn = e => { if (e.key === "Escape") setCartOpen(false); };
     window.addEventListener("keydown", fn);
     return () => window.removeEventListener("keydown", fn);
-  }, []);
+  }, [setCartOpen]);
 
   if (!cartOpen) return null;
 

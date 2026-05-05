@@ -100,7 +100,7 @@ function MainApp({ auth, onLogout, onUpdateAuth }) {
   });
   const saveCart = list => {
     setCart(list);
-    try { localStorage.setItem("rv_cart", JSON.stringify(list)); } catch {}
+    try { localStorage.setItem("rv_cart", JSON.stringify(list)); } catch (e) { console.error("Error saving rv_cart", e); }
   };
 
   const [orderHistory, setOrderHistory] = useState(() => {
@@ -109,21 +109,21 @@ function MainApp({ auth, onLogout, onUpdateAuth }) {
   });
   const saveHistory = list => {
     setOrderHistory(list);
-    try { localStorage.setItem("rv_order_history", JSON.stringify(list)); } catch {}
+    try { localStorage.setItem("rv_order_history", JSON.stringify(list)); } catch (e) { console.error("Error saving rv_order_history", e); }
   };
 
   const [mealPlan, setMealPlan] = useState(() => {
     try {
       const s = JSON.parse(localStorage.getItem("rv_mealplan"));
       if (s) return s;
-    } catch {}
+    } catch (e) { console.error("Error parsing rv_mealplan", e); }
     return Object.fromEntries(
       DAYS.map(d => [d, Object.fromEntries(MEAL_TYPES.map(t => [t, null]))])
     );
   });
   const saveMealPlan = plan => {
     setMealPlan(plan);
-    try { localStorage.setItem("rv_mealplan", JSON.stringify(plan)); } catch {}
+    try { localStorage.setItem("rv_mealplan", JSON.stringify(plan)); } catch (e) { console.error("Error saving rv_mealplan", e); }
   };
 
   const [autoOn, setAutoOn] = useState(() => {
@@ -132,7 +132,7 @@ function MainApp({ auth, onLogout, onUpdateAuth }) {
   });
   const saveAutoOn = val => {
     setAutoOn(val);
-    try { localStorage.setItem("rv_autoon", JSON.stringify(val)); } catch {}
+    try { localStorage.setItem("rv_autoon", JSON.stringify(val)); } catch (e) { console.error("Error saving rv_autoon", e); }
   };
 
   const showToast = (msg, type = "success", ms = 4000) => {

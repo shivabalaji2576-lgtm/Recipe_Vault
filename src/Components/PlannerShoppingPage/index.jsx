@@ -130,22 +130,29 @@ export function ShoppingPage() {
 
   const allMeals  = Object.values(mealPlan).flatMap(d => Object.values(d).filter(Boolean));
   const uniqueIds = [...new Set(allMeals.map(m => m.idMeal))];
+  const uniqueIdsStr = uniqueIds.join(",");
 
   useEffect(() => {
-    if (!uniqueIds.length) return;
-    setLoading(true);
-    Promise.all(
-      uniqueIds.map(id =>
-        fetch(`${API}/lookup.php?i=${id}`)
-          .then(r => r.json()).then(d => d.meals?.[0]).catch(() => null)
-      )
-    ).then(arr => {
-      const map = {};
-      arr.filter(Boolean).forEach(m => { map[m.idMeal] = m; });
-      setDetails(map);
-      setLoading(false);
-    });
-  }, [uniqueIds.join(",")]);
+    if (!uniqueIdsStr) return;
+    const fetchIds = async () => {
+      setLoading(true);
+      try {
+        const arr = await Promise.all(
+          uniqueIdsStr.split(",").map(id =>
+            fetch(`${API}/lookup.php?i=${id}`)
+              .then(r => r.json()).then(d => d.meals?.[0]).catch(() => null)
+          )
+        );
+        const map = {};
+        arr.filter(Boolean).forEach(m => { map[m.idMeal] = m; });
+        setDetails(map);
+        setLoading(false);
+      } catch {
+        setLoading(false);
+      }
+    };
+    fetchIds();
+  }, [uniqueIdsStr]);
 
   const ingMap = {};
   Object.values(details).forEach(meal => {

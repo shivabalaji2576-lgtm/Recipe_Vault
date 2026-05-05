@@ -1,5 +1,5 @@
 import { useState, useContext } from "react";
-import { Ctx, ADDRESS_LABELS, ADDRESS_LABEL_ICONS, getPrice } from "../constants";
+import { Ctx, ADDRESS_LABELS, ADDRESS_LABEL_ICONS } from "../constants";
 
 /* ═══════════════════════════
    PROFILE PAGE  –  Component 6
@@ -52,7 +52,7 @@ export default function ProfilePage({ auth, onLogout, onUpdateAuth }) {
       const a = JSON.parse(localStorage.getItem("rv_accounts")) || {};
       if (a[auth.email]) a[auth.email].name = u.name;
       localStorage.setItem("rv_accounts", JSON.stringify(a));
-    } catch {}
+    } catch (e) { console.error("Error saving account:", e); }
     setEditingName(false); setNameSaved(true);
     setTimeout(() => setNameSaved(false), 2500);
   };

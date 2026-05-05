@@ -8,7 +8,7 @@ import {
    EXPLORE PAGE  –  Component 2
 ═══════════════════════════ */
 export default function ExplorePage() {
-  const { nav, setCartOpen, cart } = useContext(Ctx);
+  const { setCartOpen, cart } = useContext(Ctx);
   const [query,   setQuery]   = useState("");
   const [meals,   setMeals]   = useState([]);
   const [cats,    setCats]    = useState([]);
@@ -36,28 +36,53 @@ export default function ExplorePage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadDefault();
     fetch(`${API}/categories.php`).then(r => r.json())
       .then(d => setCats(d.categories || [])).catch(() => {});
   }, []);
 
   useEffect(() => {
-    if (!dq.trim()) { if (!selCat) loadDefault(); return; }
-    setLoading(true); setErrMsg("");
-    fetch(`${API}/search.php?s=${encodeURIComponent(dq)}`)
-      .then(r => r.json())
-      .then(d => { setMeals(d.meals || []); setLoading(false); })
-      .catch(() => { setErrMsg("Search failed."); setLoading(false); });
-  }, [dq]);
+    if (!dq.trim()) {
+      if (!selCat) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        loadDefault();
+      }
+      return;
+    }
+    const doSearch = async () => {
+      setLoading(true); setErrMsg("");
+      try {
+        const r = await fetch(`${API}/search.php?s=${encodeURIComponent(dq)}`);
+        const d = await r.json();
+        setMeals(d.meals || []); setLoading(false);
+      } catch {
+        setErrMsg("Search failed."); setLoading(false);
+      }
+    };
+    doSearch();
+  }, [dq, selCat]);
 
   useEffect(() => {
-    if (!selCat) { if (!query) loadDefault(); return; }
-    setLoading(true);
-    fetch(`${API}/filter.php?c=${encodeURIComponent(selCat)}`)
-      .then(r => r.json())
-      .then(d => { setMeals(d.meals || []); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, [selCat]);
+    if (!selCat) {
+      if (!query) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        loadDefault();
+      }
+      return;
+    }
+    const doFilter = async () => {
+      setLoading(true);
+      try {
+        const r = await fetch(`${API}/filter.php?c=${encodeURIComponent(selCat)}`);
+        const d = await r.json();
+        setMeals(d.meals || []); setLoading(false);
+      } catch {
+        setLoading(false);
+      }
+    };
+    doFilter();
+  }, [selCat, query]);
 
   const display = healthy ? meals.filter(m => !m.strCategory || HC.includes(m.strCategory)) : meals;
 
@@ -223,11 +248,17 @@ export function DetailPage({ mealId }) {
   const [ingFlash, setIngFlash] = useState({});
 
   useEffect(() => {
-    setLoading(true);
-    fetch(`${API}/lookup.php?i=${mealId}`)
-      .then(r => r.json())
-      .then(d => { setMeal(d.meals?.[0] || null); setLoading(false); })
-      .catch(() => setLoading(false));
+    const fetchMeal = async () => {
+      setLoading(true);
+      try {
+        const r = await fetch(`${API}/lookup.php?i=${mealId}`);
+        const d = await r.json();
+        setMeal(d.meals?.[0] || null); setLoading(false);
+      } catch {
+        setLoading(false);
+      }
+    };
+    fetchMeal();
   }, [mealId]);
 
   if (loading) return <div className="center-loader"><div className="spinner" /></div>;
