@@ -97,7 +97,7 @@ The user's name is ${auth?.name || "there"}. Keep responses concise, warm, and h
     setLoading(true);
 
     /* Fallback mode (no API key) */
-    if (!CHATBOT_READY || GEMINI_API_KEY === "AIzaSyD6iPQtdoMd_nbRijeMKLccgVpJgKihEuk") {
+    if (!CHATBOT_READY || !GEMINI_API_KEY) {
       await new Promise(r => setTimeout(r, 500));
       setMessages(prev => [...prev, { role: "assistant", text: getFallback(text) }]);
       if (!open) triggerPulse();
