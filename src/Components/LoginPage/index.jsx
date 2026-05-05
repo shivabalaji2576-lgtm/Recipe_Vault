@@ -6,18 +6,18 @@ import { useState } from "react";
 
 function clearUserData() {
   const USER_KEYS = [
-    "rv_cart","rv_order_history","rv_mealplan",
-    "rv_autoon","rv_addresses","rv_default_addr","rv_city",
+    "rv_cart", "rv_order_history", "rv_mealplan",
+    "rv_autoon", "rv_addresses", "rv_default_addr", "rv_city",
   ];
   USER_KEYS.forEach(k => localStorage.removeItem(k));
 }
 
 export default function LoginPage({ onLogin }) {
-  const [tab,  setTab]  = useState("login");
+  const [tab, setTab] = useState("login");
   const [name, setName] = useState("");
-  const [email,setEmail]= useState("");
+  const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
-  const [err,  setErr]  = useState("");
+  const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
   const getAcc = () => {
@@ -83,7 +83,7 @@ export default function LoginPage({ onLogin }) {
           ))}
         </div>
         <div className="ll-deco">
-          {["🥑","🥦","🍋","🫐","🥕","🍎","🥚","🌿"].map((e, i) => (
+          {["🥑", "🥦", "🍋", "🫐", "🥕", "🍎", "🥚", "🌿"].map((e, i) => (
             <span key={i} className="deco-item" style={{ animationDelay: `${i * 0.38}s` }}>{e}</span>
           ))}
         </div>
@@ -93,7 +93,7 @@ export default function LoginPage({ onLogin }) {
       <div className="login-right">
         <div className="login-card">
           <div className="login-tabs">
-            <button className={`ltab${tab === "login"  ? " ltab-on" : ""}`} onClick={() => setTab("login")}>Sign In</button>
+            <button className={`ltab${tab === "login" ? " ltab-on" : ""}`} onClick={() => setTab("login")}>Sign In</button>
             <button className={`ltab${tab === "signup" ? " ltab-on" : ""}`} onClick={() => setTab("signup")}>Sign Up</button>
           </div>
           <h2 className="lcard-title">{tab === "login" ? "Welcome back 👋" : "Create your account"}</h2>
