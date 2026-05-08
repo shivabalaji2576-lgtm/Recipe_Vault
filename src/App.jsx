@@ -5,7 +5,7 @@ import "./App.css";
 import {
   Ctx,
   DAYS, MEAL_TYPES, DELIVERY,
-  getPrice, buildOrderEmail, sendDirectEmail,
+  getPrice, buildOrderEmail, sendDirectEmail, sendOrderConfirmationCall,
 } from "./Components/constants";
 
 /* ── Component 1 : Login ── */
@@ -93,6 +93,7 @@ function MainApp({ auth, onLogout, onUpdateAuth }) {
   const [sending,     setSending]     = useState(false);
   const [cartOpen,    setCartOpen]    = useState(false);
   const [orderPlaced, setOrderPlaced] = useState(false);
+  const [calling,     setCalling]     = useState(false);
 
   const [cart, setCart] = useState(() => {
     try { return JSON.parse(localStorage.getItem("rv_cart")) || []; }
@@ -177,9 +178,26 @@ function MainApp({ auth, onLogout, onUpdateAuth }) {
     ]);
     setSending(false);
     setOrderPlaced(true);
+    
+    // Trigger AI phone call
+    if (auth.phone) {
+      setCalling(true);
+      showToast("📞 Dialing your phone...", "info", 3000);
+      const callRes = await sendOrderConfirmationCall(auth.phone, auth.name, cart);
+      setCalling(false);
+      if (callRes.ok) {
+        showToast("✅ AI Call initiated! Check your phone.", "success");
+      } else {
+        console.error("Call Failed:", callRes.msg);
+        showToast(`⚠️ AI Call failed: ${callRes.msg}`, "info");
+      }
+    } else {
+      showToast("⚠️ No phone number in profile. Skipping call.", "info");
+    }
+
     result.ok
       ? showToast(`✅ Order confirmed! Email sent to ${auth.email}`, "success")
-      : showToast("✅ Order placed! (Configure EmailJS for email)", "success");
+      : showToast("✅ Order placed!", "success");
   };
 
   const addToPlanner = (meal, day, type) =>
@@ -205,6 +223,14 @@ function MainApp({ auth, onLogout, onUpdateAuth }) {
     const { subject, body } = buildOrderEmail(auth, items);
     const result = await sendDirectEmail(auth.email, auth.name, subject, body);
     setSending(false);
+
+    // Trigger AI phone call for auto-orders too
+    if (auth.phone) {
+      setCalling(true);
+      const callRes = await sendOrderConfirmationCall(auth.phone, auth.name, items);
+      setCalling(false);
+    }
+
     if (result.ok) showToast(`✅ ${meals.length} meal(s) for ${today} added! Email sent`, "success");
     return today;
   };
@@ -224,6 +250,7 @@ function MainApp({ auth, onLogout, onUpdateAuth }) {
     autoOn, setAutoOn: saveAutoOn, autoOrderToday,
     showToast, sending,
     cartOpen, setCartOpen,
+    calling,
   };
 
   return (
@@ -277,7 +304,7 @@ function MainApp({ auth, onLogout, onUpdateAuth }) {
    APP HEADER
 ───────────────────────────────────── */
 function AppHeader({ page, nav, cartCount, plannedCount, auth, onLogout }) {
-  const { setCartOpen } = useContext(Ctx);
+  const { setCartOpen, calling } = useContext(Ctx);
 
   const tabs = [
     { id: "home",     label: "🍽 Explore" },
@@ -320,6 +347,12 @@ function AppHeader({ page, nav, cartCount, plannedCount, auth, onLogout }) {
           </button>
 
           <div className="hdr-user">
+            {calling && (
+              <div className="ai-status">
+                <div className="ai-pulse" />
+                <span>AI Calling...</span>
+              </div>
+            )}
             <div className="user-avatar" onClick={() => nav("profile")} style={{ cursor: "pointer" }}>
               {auth.name[0].toUpperCase()}
             </div>

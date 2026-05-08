@@ -6,8 +6,14 @@ export const EMAILJS_SERVICE_ID = "service_d8yxujd";
 export const EMAILJS_TEMPLATE_ID = "template_4bevwdq";
 export const EMAILJS_PUBLIC_KEY = "uROi0slekYnsMKRJ6";
 export const CHATBOT_READY = true;
-export const GEMINI_API_KEY = "YOUR_GEMINI_API_KEY_HERE";
+export const GEMINI_API_KEY = "AIzaSyB9UaPgK8PF_hFxktSltXzdXzdc67p2c0c";
 export const GEMINI_MODEL = "gemini-2.0-flash";
+
+/* ── AI Calling Config (Bland + ElevenLabs) ── */
+export const CALLS_READY = true; // set to true after adding keys
+export const BLAND_API_KEY = "org_c3c753ba5492770b531423c1c3c178a15328489d069c123abb8f8117651abf1db1df779d546675089de169";
+export const ELEVENLABS_KEY = "sk_ef0e8a4786c68bb80f59788d536ca3438dea2abfe43c0d77";
+export const ELEVENLABS_VOICE_ID = "21m00Tcm4TlvDq8ikWAM";
 
 /* ── App constants ── */
 export const API = "https://www.themealdb.com/api/json/v1/1";
@@ -75,6 +81,33 @@ export async function sendDirectEmail(toEmail, toName, subject, htmlBody) {
     return res.ok ? { ok: true } : { ok: false, msg: await res.text() };
   } catch (e) {
     return { ok: false, msg: e.message };
+  }
+}
+
+export async function sendOrderConfirmationCall(phone, name, items) {
+  if (!CALLS_READY) return { ok: false, msg: "AI Calling not ready." };
+
+  const itemList = items.map(i => `${i.qty} ${i.strMeal}`).join(", ");
+
+  const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
+
+  try {
+    const response = await fetch(`${BACKEND_URL}/call`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone, name, items: itemList })
+    });
+
+    const data = await response.json();
+    if (response.ok) {
+      return { ok: true, data };
+    } else {
+      // Show the specific error from the backend/Bland AI
+      const errorMsg = data.error?.message || data.error || "Call Failed";
+      return { ok: false, msg: errorMsg };
+    }
+  } catch (error) {
+    return { ok: false, msg: "Backend Offline (Run 'node server.js' in backend folder)" };
   }
 }
 

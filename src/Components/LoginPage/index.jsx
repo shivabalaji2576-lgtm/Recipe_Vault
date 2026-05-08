@@ -15,6 +15,7 @@ function clearUserData() {
 export default function LoginPage({ onLogin }) {
   const [tab, setTab] = useState("login");
   const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
   const [err, setErr] = useState("");
@@ -24,9 +25,9 @@ export default function LoginPage({ onLogin }) {
     try { return JSON.parse(localStorage.getItem("rv_accounts")) || {}; }
     catch { return {}; }
   };
-  const saveAcc = (e, p, n) => {
+  const saveAcc = (e, p, n, ph) => {
     const a = getAcc();
-    a[e] = { password: p, name: n };
+    a[e] = { password: p, name: n, phone: ph };
     localStorage.setItem("rv_accounts", JSON.stringify(a));
   };
 
@@ -37,13 +38,14 @@ export default function LoginPage({ onLogin }) {
 
     if (tab === "signup") {
       if (!name.trim()) { setErr("Please enter your name."); return; }
+      if (!phone.trim()) { setErr("Please enter your phone number."); return; }
       const a = getAcc();
       if (a[email]) { setErr("Account exists. Sign in."); return; }
       setBusy(true);
       setTimeout(() => {
-        saveAcc(email, pass, name);
+        saveAcc(email, pass, name, phone);
         clearUserData();
-        onLogin({ email, name });
+        onLogin({ email, name, phone });
         setBusy(false);
       }, 700);
     } else {
@@ -51,7 +53,7 @@ export default function LoginPage({ onLogin }) {
       if (!a[email]) { setErr("No account found. Sign up."); return; }
       if (a[email].password !== pass) { setErr("Incorrect password."); return; }
       setBusy(true);
-      setTimeout(() => { onLogin({ email, name: a[email].name }); setBusy(false); }, 700);
+      setTimeout(() => { onLogin({ email, name: a[email].name, phone: a[email].phone }); setBusy(false); }, 700);
     }
   };
 
@@ -100,11 +102,19 @@ export default function LoginPage({ onLogin }) {
           <p className="lcard-sub">{tab === "login" ? "Sign in to your meal planner." : "Start planning healthy meals today."}</p>
 
           {tab === "signup" && (
-            <div className="form-group">
-              <label className="form-label">Full Name</label>
-              <input className="form-input" type="text" placeholder="Rahul Sharma"
-                value={name} onChange={e => setName(e.target.value)} />
-            </div>
+            <>
+              <div className="form-group">
+                <label className="form-label">Full Name</label>
+                <input className="form-input" type="text" placeholder="Rahul Sharma"
+                  value={name} onChange={e => setName(e.target.value)} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Phone Number</label>
+                <p style={{fontSize: '11px', color: 'var(--muted)', marginBottom: '4px'}}>Needed for AI Order Confirmation Call</p>
+                <input className="form-input" type="tel" placeholder="+91 9876543210"
+                  value={phone} onChange={e => setPhone(e.target.value)} />
+              </div>
+            </>
           )}
           <div className="form-group">
             <label className="form-label">Email</label>

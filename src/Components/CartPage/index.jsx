@@ -1,30 +1,199 @@
-import { useContext, useEffect } from "react";
-import { Ctx, DELIVERY, fmt, getPrice } from "../constants";
+import { useState, useEffect, useContext } from "react";
+import { Ctx, fmt, getPrice, DELIVERY } from "../constants";
 
 /* ═══════════════════════════
-   CART DRAWER  –  Component 7a (slide-in panel)
+   PAYMENT METHODS CONFIG
+═══════════════════════════ */
+const PAYMENT_METHODS = [
+  {
+    id: "phonepe",
+    label: "PhonePe",
+    icon: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5f/PhonePe_Logo.png/200px-PhonePe_Logo.png",
+    emoji: "💜",
+    tag: "UPI",
+    color: "#5f259f",
+    bg: "#f5eeff",
+    border: "#c89ef5",
+    desc: "Pay using PhonePe UPI",
+  },
+  {
+    id: "googlepay",
+    label: "Google Pay",
+    icon: "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f2/Google_Pay_Logo.svg/200px-Google_Pay_Logo.svg.png",
+    emoji: "🔵",
+    tag: "UPI",
+    color: "#1a73e8",
+    bg: "#e8f0fe",
+    border: "#93b8f7",
+    desc: "Pay using Google Pay UPI",
+  },
+  {
+    id: "cod",
+    label: "Cash on Delivery",
+    icon: null,
+    emoji: "💵",
+    tag: "COD",
+    color: "#2a7040",
+    bg: "#edfaf3",
+    border: "#7dd3a8",
+    desc: "Pay with cash when delivered",
+  },
+];
+
+/* ═══════════════════════════
+   PAYMENT MODAL
+═══════════════════════════ */
+function PaymentModal({ total, onSelect, onClose }) {
+  const [selected, setSelected] = useState(null);
+  const [applied, setApplied] = useState(null);
+  const [animating, setAnimating] = useState(false);
+
+  const handleApply = () => {
+    if (!selected) return;
+    const method = PAYMENT_METHODS.find(m => m.id === selected);
+    setAnimating(true);
+    setTimeout(() => { setApplied(method); setAnimating(false); }, 600);
+  };
+
+  return (
+    <>
+      <div className="pm-backdrop" onClick={onClose} />
+      <div className="pm-modal">
+        {/* Header */}
+        <div className="pm-header">
+          <div className="pm-header-left">
+            <span className="pm-header-icon">💳</span>
+            <div>
+              <h2 className="pm-title">Choose Payment</h2>
+              <p className="pm-subtitle">Select a method to pay {fmt(total)}</p>
+            </div>
+          </div>
+          <button className="pm-close" onClick={onClose}>✕</button>
+        </div>
+
+        <div className="pm-body">
+          {/* Applied badge */}
+          {applied && (
+            <div className="pm-applied-bar" style={{ background: applied.bg, borderColor: applied.border }}>
+              <span className="pm-applied-emoji">{applied.emoji}</span>
+              <div className="pm-applied-info">
+                <p className="pm-applied-label" style={{ color: applied.color }}>✓ {applied.label} Applied</p>
+                <p className="pm-applied-desc">{applied.desc}</p>
+              </div>
+              <button className="pm-change-btn" onClick={() => { setApplied(null); setSelected(null); }}>
+                Change
+              </button>
+            </div>
+          )}
+
+          {/* Method list */}
+          {!applied && (
+            <div className="pm-methods">
+              <p className="pm-methods-label">Available Payment Options</p>
+
+              {PAYMENT_METHODS.map(m => (
+                <div
+                  key={m.id}
+                  className={`pm-method-card${selected === m.id ? " pm-method-selected" : ""}`}
+                  style={selected === m.id ? { borderColor: m.border, background: m.bg } : {}}
+                  onClick={() => setSelected(m.id)}
+                >
+                  <div className="pm-method-left">
+                    <div className="pm-radio" style={selected === m.id ? { borderColor: m.color } : {}}>
+                      {selected === m.id && <div className="pm-radio-dot" style={{ background: m.color }} />}
+                    </div>
+                    <div className="pm-method-icon-wrap" style={{ background: m.bg, borderColor: m.border }}>
+                      {m.icon ? (
+                        <img
+                          src={m.icon} alt={m.label} className="pm-method-logo"
+                          onError={e => { e.target.style.display = "none"; e.target.nextSibling.style.display = "flex"; }}
+                        />
+                      ) : null}
+                      <span className="pm-method-emoji" style={{ display: m.icon ? "none" : "flex" }}>
+                        {m.emoji}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="pm-method-name">{m.label}</p>
+                      <p className="pm-method-desc">{m.desc}</p>
+                    </div>
+                  </div>
+                  <span className="pm-method-tag" style={{ background: m.color }}>{m.tag}</span>
+                </div>
+              ))}
+
+              <button
+                className={`pm-apply-btn${selected ? " pm-apply-active" : ""}${animating ? " pm-apply-spin" : ""}`}
+                onClick={handleApply}
+                disabled={!selected || animating}
+              >
+                {animating
+                  ? <><span className="pm-spin-icon">◌</span> Applying…</>
+                  : "Apply Payment Method →"}
+              </button>
+            </div>
+          )}
+
+          {/* Bill */}
+          <div className="pm-bill">
+            <div className="pm-bill-row"><span>Amount to Pay</span><span className="pm-bill-total">{fmt(total)}</span></div>
+            <div className="pm-bill-secure">🔒 100% Secure Payment</div>
+          </div>
+        </div>
+
+        {/* Confirm footer */}
+        {applied && (
+          <div className="pm-footer">
+            <div className="pm-footer-info">
+              <span className="pm-footer-emoji">{applied.emoji}</span>
+              <span>Paying via <strong>{applied.label}</strong></span>
+            </div>
+            <button className="pm-confirm-btn" onClick={() => onSelect(applied)}>
+              ✅ Confirm & Place Order · {fmt(total)}
+            </button>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+/* ═══════════════════════════
+   CART DRAWER (slide-in)
 ═══════════════════════════ */
 export function CartDrawer() {
   const {
     auth, cart, removeFromCart, updateQty, clearCart,
-    placeOrder, orderPlaced, setOrderPlaced, sending,
-    cartOpen, setCartOpen, nav,
+    placeOrder, orderPlaced, setOrderPlaced,
+    sending, cartOpen, setCartOpen, nav,
   } = useContext(Ctx);
 
-  const sub   = cart.reduce((s, c) => s + c.qty * (c.price || getPrice(c)), 0);
+  const [showPayment, setShowPayment] = useState(false);
+  const [appliedMethod, setAppliedMethod] = useState(null);
+
+  const sub = cart.reduce((s, c) => s + c.qty * (c.price || getPrice(c)), 0);
   const total = sub + (cart.length ? DELIVERY : 0);
 
   useEffect(() => {
-    const fn = e => { if (e.key === "Escape") setCartOpen(false); };
+    const fn = e => { if (e.key === "Escape") { setShowPayment(false); setCartOpen(false); } };
     window.addEventListener("keydown", fn);
     return () => window.removeEventListener("keydown", fn);
-  }, [setCartOpen]);
+  }, []);
+
+  const handlePaymentSelect = method => {
+    setAppliedMethod(method);
+    setShowPayment(false);
+  };
 
   if (!cartOpen) return null;
 
   return (
     <>
-      <div className="cd-overlay" onClick={() => setCartOpen(false)} />
+      <div className="cd-overlay" onClick={() => { setShowPayment(false); setCartOpen(false); }} />
+      {showPayment && (
+        <PaymentModal total={total} onSelect={handlePaymentSelect} onClose={() => setShowPayment(false)} />
+      )}
+
       <div className="cd-drawer">
         {/* Header */}
         <div className="cd-hdr">
@@ -33,8 +202,7 @@ export function CartDrawer() {
             <div>
               <h2 className="cd-hdr-title">Your Cart</h2>
               <p className="cd-hdr-sub">
-                {cart.length === 0
-                  ? "Empty"
+                {cart.length === 0 ? "Empty"
                   : `${cart.reduce((s, c) => s + c.qty, 0)} item${cart.reduce((s, c) => s + c.qty, 0) !== 1 ? "s" : ""} · ${fmt(total)}`}
               </p>
             </div>
@@ -49,9 +217,7 @@ export function CartDrawer() {
               <div className="cd-empty-emoji">🍽️</div>
               <h3 className="cd-empty-title">Your cart is empty</h3>
               <p className="cd-empty-desc">Browse Explore and tap <strong>Add to Cart</strong> on any dish.</p>
-              <button className="cd-browse-btn" onClick={() => { setCartOpen(false); nav("home"); }}>
-                🍽 Browse Recipes
-              </button>
+              <button className="cd-browse-btn" onClick={() => { setCartOpen(false); nav("home"); }}>🍽 Browse Recipes</button>
             </div>
           ) : (
             <>
@@ -93,6 +259,23 @@ export function CartDrawer() {
                 <div className="cd-sum-row cd-sum-total"><span>Total</span><span>{fmt(total)}</span></div>
               </div>
 
+              {/* Payment badge inside drawer */}
+              {appliedMethod ? (
+                <div className="cd-payment-applied" style={{ background: appliedMethod.bg, borderColor: appliedMethod.border }}>
+                  <span className="cd-pay-emoji">{appliedMethod.emoji}</span>
+                  <span className="cd-pay-name" style={{ color: appliedMethod.color }}>
+                    ✓ {appliedMethod.label}
+                  </span>
+                  <button className="cd-pay-change" onClick={() => { setAppliedMethod(null); setShowPayment(true); }}>
+                    Change
+                  </button>
+                </div>
+              ) : (
+                <button className="cd-select-pay-btn" onClick={() => setShowPayment(true)}>
+                  💳 Select Payment Method
+                </button>
+              )}
+
               <div className="cd-email-notice">
                 <span>📧</span>
                 <span>Confirmation sent to <strong>{auth?.email}</strong></span>
@@ -108,19 +291,39 @@ export function CartDrawer() {
               <div className="cd-placed">
                 <div className="cd-placed-icon">✅</div>
                 <p className="cd-placed-title">Order Placed!</p>
-                <p className="cd-placed-sub">Email sent to {auth?.email}</p>
+                <p className="cd-placed-sub">
+                  {appliedMethod ? `${appliedMethod.emoji} ${appliedMethod.label} · ` : ""}
+                  Email sent to {auth?.email}
+                </p>
                 <div className="cd-placed-actions">
-                  <button className="cd-new-btn" onClick={() => { clearCart(); setOrderPlaced(false); }}>🛒 New Order</button>
-                  <button className="cd-hist-btn" onClick={() => { setCartOpen(false); nav("orders"); }}>📋 History</button>
+                  <button className="cd-new-btn" onClick={() => { clearCart(); setOrderPlaced(false); setAppliedMethod(null); }}>
+                    🛒 New Order
+                  </button>
+                  <button className="cd-hist-btn" onClick={() => { setCartOpen(false); nav("orders"); }}>
+                    📋 History
+                  </button>
                 </div>
               </div>
-            ) : (
+            ) : appliedMethod ? (
               <>
-                <button className={`cd-place-btn${sending ? " cd-place-busy" : ""}`}
-                  onClick={placeOrder} disabled={sending}>
+                <button
+                  className={`cd-place-btn${sending ? " cd-place-busy" : ""}`}
+                  onClick={placeOrder}
+                  disabled={sending}
+                >
                   {sending
                     ? <><span className="cd-spin">◌</span> Sending…</>
-                    : <><span>✅ Place Order</span><span className="cd-place-total">{fmt(total)}</span></>}
+                    : <><span>✅ {appliedMethod.emoji} Place Order</span><span className="cd-place-total">{fmt(total)}</span></>}
+                </button>
+                <button className="cd-clear-btn" onClick={() => { clearCart(); setOrderPlaced(false); setAppliedMethod(null); }}>
+                  🗑 Clear Cart
+                </button>
+              </>
+            ) : (
+              <>
+                <button className="cd-place-btn cd-pay-locked" onClick={() => setShowPayment(true)}>
+                  <span>💳 Select Payment & Order</span>
+                  <span className="cd-place-total">{fmt(total)}</span>
                 </button>
                 <button className="cd-clear-btn" onClick={() => { clearCart(); setOrderPlaced(false); }}>
                   🗑 Clear Cart
@@ -135,25 +338,37 @@ export function CartDrawer() {
 }
 
 /* ═══════════════════════════
-   CART PAGE  –  Component 7b (full page)
+   CART PAGE (full page)
 ═══════════════════════════ */
 export default function CartPage() {
   const {
     auth, cart, removeFromCart, updateQty, clearCart,
-    placeOrder, orderPlaced, setOrderPlaced, sending, nav,
+    placeOrder, orderPlaced, setOrderPlaced,
+    sending, nav,
   } = useContext(Ctx);
 
-  const sub   = cart.reduce((s, c) => s + c.qty * (c.price || getPrice(c)), 0);
+  const [showPayment, setShowPayment] = useState(false);
+  const [appliedMethod, setAppliedMethod] = useState(null);
+
+  const sub = cart.reduce((s, c) => s + c.qty * (c.price || getPrice(c)), 0);
   const total = sub + (cart.length ? DELIVERY : 0);
+
+  const handlePaymentSelect = method => {
+    setAppliedMethod(method);
+    setShowPayment(false);
+  };
 
   return (
     <div className="cart-page">
+      {showPayment && (
+        <PaymentModal total={total} onSelect={handlePaymentSelect} onClose={() => setShowPayment(false)} />
+      )}
+
       <div className="page-header">
         <div>
           <h1 className="page-title">🛒 Your Cart</h1>
           <p className="page-sub">
-            {cart.length === 0
-              ? "Empty — add items from Explore"
+            {cart.length === 0 ? "Empty — add items from Explore"
               : `${cart.reduce((s, c) => s + c.qty, 0)} item${cart.reduce((s, c) => s + c.qty, 0) !== 1 ? "s" : ""} · Total ${fmt(total)}`}
           </p>
         </div>
@@ -171,17 +386,18 @@ export default function CartPage() {
         </div>
       ) : (
         <div className="cart-layout">
-          {/* Items column */}
+
+          {/* ── Items column ── */}
           <div className="cart-items-col">
             <div className="cart-items-header">
               <h3 className="cart-items-title">
                 Order Items <span className="cart-count-badge">{cart.length}</span>
               </h3>
-              <button className="cart-clear-link" onClick={() => { clearCart(); setOrderPlaced(false); }}>
+              <button className="cart-clear-link"
+                onClick={() => { clearCart(); setOrderPlaced(false); setAppliedMethod(null); }}>
                 🗑 Clear all
               </button>
             </div>
-
             {cart.map(item => {
               const price = item.price || getPrice(item);
               return (
@@ -207,15 +423,20 @@ export default function CartPage() {
             })}
           </div>
 
-          {/* Summary panel */}
+          {/* ── Summary panel ── */}
           <div className="cart-summary-panel">
             <h3 className="csp-title">Order Summary</h3>
+
             <div className="csp-email-row">
               <span>📧</span>
               <span>Confirmation to <strong>{auth?.email}</strong></span>
             </div>
+
             <div className="csp-divider" />
-            <div className="csp-row"><span>Subtotal ({cart.reduce((s, c) => s + c.qty, 0)} items)</span><span>{fmt(sub)}</span></div>
+            <div className="csp-row">
+              <span>Subtotal ({cart.reduce((s, c) => s + c.qty, 0)} items)</span>
+              <span>{fmt(sub)}</span>
+            </div>
             <div className="csp-row"><span>🚚 Delivery</span><span>{fmt(DELIVERY)}</span></div>
             <div className="csp-row csp-savings">
               <span>🎉 Free delivery on orders above ₹499</span>
@@ -224,21 +445,62 @@ export default function CartPage() {
             <div className="csp-divider" />
             <div className="csp-row csp-total"><span>Total</span><span>{fmt(total)}</span></div>
 
+            {/* ── Payment method picker ── */}
+            <div className="csp-payment-section">
+              <p className="csp-payment-label">💳 Payment Method</p>
+              {appliedMethod ? (
+                <div className="csp-payment-applied"
+                  style={{ background: appliedMethod.bg, borderColor: appliedMethod.border }}>
+                  <div className="csp-pay-left">
+                    <span className="csp-pay-emoji">{appliedMethod.emoji}</span>
+                    <div>
+                      <p className="csp-pay-name" style={{ color: appliedMethod.color }}>
+                        ✓ {appliedMethod.label}
+                      </p>
+                      <p className="csp-pay-desc">{appliedMethod.desc}</p>
+                    </div>
+                  </div>
+                  <button className="csp-pay-change"
+                    onClick={() => { setAppliedMethod(null); setShowPayment(true); }}>
+                    Change
+                  </button>
+                </div>
+              ) : (
+                <button className="csp-select-pay-btn" onClick={() => setShowPayment(true)}>
+                  💳 Select Payment Method
+                </button>
+              )}
+            </div>
+
+            {/* ── CTA ── */}
             {orderPlaced ? (
               <div className="csp-placed">
                 <div className="csp-placed-check">✅</div>
                 <h3 className="csp-placed-title">Order Placed!</h3>
+                {appliedMethod && (
+                  <p className="csp-placed-pay">{appliedMethod.emoji} Paid via {appliedMethod.label}</p>
+                )}
                 <p className="csp-placed-sub">Confirmation sent to {auth?.email}</p>
                 <p className="csp-placed-eta">🕐 ETA: 30–45 minutes · Hyderabad</p>
-                <button className="csp-new-btn" onClick={() => { clearCart(); setOrderPlaced(false); }}>🛒 Place New Order</button>
+                <button className="csp-new-btn"
+                  onClick={() => { clearCart(); setOrderPlaced(false); setAppliedMethod(null); }}>
+                  🛒 Place New Order
+                </button>
                 <button className="csp-hist-btn" onClick={() => nav("orders")}>📋 View Order History</button>
               </div>
-            ) : (
-              <button className={`csp-place-btn${sending ? " csp-busy" : ""}`}
-                onClick={placeOrder} disabled={sending}>
+            ) : appliedMethod ? (
+              <button
+                className={`csp-place-btn${sending ? " csp-busy" : ""}`}
+                onClick={placeOrder}
+                disabled={sending}
+              >
                 {sending
                   ? <><span className="csp-spin">◌</span> Sending confirmation…</>
                   : <>✅ Place Order · {fmt(total)}</>}
+              </button>
+            ) : (
+              <button className="csp-place-btn csp-pay-locked" onClick={() => setShowPayment(true)}>
+                💳 Select Payment to Continue
               </button>
             )}
 

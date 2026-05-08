@@ -5,12 +5,16 @@ import { Ctx, ADDRESS_LABELS, ADDRESS_LABEL_ICONS } from "../constants";
    PROFILE PAGE  –  Component 6
 ═══════════════════════════ */
 export default function ProfilePage({ auth, onLogout, onUpdateAuth }) {
-  const { nav } = useContext(Ctx);
+  const { nav, calling, showToast } = useContext(Ctx);
 
-  /* ── Name editing ── */
   const [editingName, setEditingName] = useState(false);
   const [nameInput,   setNameInput]   = useState(auth.name);
   const [nameSaved,   setNameSaved]   = useState(false);
+
+  /* ── Phone editing ── */
+  const [editingPhone, setEditingPhone] = useState(false);
+  const [phoneInput,   setPhoneInput]   = useState(auth.phone || "");
+  const [phoneSaved,   setPhoneSaved]   = useState(false);
 
   /* ── City editing ── */
   const [editingCity, setEditingCity] = useState(false);
@@ -55,6 +59,19 @@ export default function ProfilePage({ auth, onLogout, onUpdateAuth }) {
     } catch (e) { console.error("Error saving account:", e); }
     setEditingName(false); setNameSaved(true);
     setTimeout(() => setNameSaved(false), 2500);
+  };
+
+  const savePhone = () => {
+    if (!phoneInput.trim()) return;
+    const u = { ...auth, phone: phoneInput.trim() };
+    onUpdateAuth(u);
+    try {
+      const a = JSON.parse(localStorage.getItem("rv_accounts")) || {};
+      if (a[auth.email]) a[auth.email].phone = u.phone;
+      localStorage.setItem("rv_accounts", JSON.stringify(a));
+    } catch (e) { console.error("Error saving account:", e); }
+    setEditingPhone(false); setPhoneSaved(true);
+    setTimeout(() => setPhoneSaved(false), 2500);
   };
 
   const saveCity = () => {
@@ -115,6 +132,7 @@ export default function ProfilePage({ auth, onLogout, onUpdateAuth }) {
         <div className="profile-banner-info">
           <h1 className="profile-banner-name">{auth.name}</h1>
           <p className="profile-banner-email">📧 {auth.email}</p>
+          <p className="profile-banner-email">📞 {auth.phone || "No phone added"}</p>
           <p className="profile-banner-city">📍 {cityInput}</p>
         </div>
         <div className="profile-banner-stats">
@@ -129,6 +147,7 @@ export default function ProfilePage({ auth, onLogout, onUpdateAuth }) {
       </div>
 
       {nameSaved  && <div className="profile-flash">✅ Name updated!</div>}
+      {phoneSaved && <div className="profile-flash">✅ Phone updated!</div>}
       {citySaved  && <div className="profile-flash">✅ City updated!</div>}
       {formSaved  && <div className="profile-flash">✅ Address saved!</div>}
 
@@ -164,6 +183,40 @@ export default function ProfilePage({ auth, onLogout, onUpdateAuth }) {
                   <span className="pfield-val">{auth.email}</span>
                   <span className="pfield-verified">✓ Verified</span>
                 </div>
+              </div>
+              {/* Phone */}
+              <div className="pfield">
+                <span className="pfield-lbl">Phone Number</span>
+                {editingPhone ? (
+                  <div className="pfield-edit-row">
+                    <input className="pfield-inp" value={phoneInput} autoFocus
+                      onChange={e => setPhoneInput(e.target.value)} type="tel"
+                      onKeyDown={e => { if (e.key === "Enter") savePhone(); if (e.key === "Escape") { setEditingPhone(false); setPhoneInput(auth.phone || ""); } }} />
+                    <button className="pfield-save" onClick={savePhone}>Save</button>
+                    <button className="pfield-discard" onClick={() => { setEditingPhone(false); setPhoneInput(auth.phone || ""); }}>✕</button>
+                  </div>
+                ) : (
+                  <div className="pfield-view-row">
+                    <span className="pfield-val">{auth.phone || "Not set"}</span>
+                    <div style={{ display: "flex", gap: "8px" }}>
+                      <button className="pfield-edit-btn" onClick={() => setEditingPhone(true)}>✏️ Edit</button>
+                      {auth.phone && (
+                        <button 
+                          className="pfield-edit-btn" 
+                          style={{ background: "var(--soft)", color: "var(--green)", opacity: calling ? 0.6 : 1 }}
+                          disabled={calling}
+                          onClick={async () => {
+                            const { sendOrderConfirmationCall } = await import("../constants");
+                            showToast("📞 Testing AI Call...", "info");
+                            await sendOrderConfirmationCall(auth.phone, auth.name, [{ qty: 1, strMeal: "Test Recipe" }]);
+                          }}
+                        >
+                          {calling ? "◌ Dialing..." : "📞 Test AI Call"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
               {/* City */}
               <div className="pfield" style={{ borderBottom: "none" }}>
