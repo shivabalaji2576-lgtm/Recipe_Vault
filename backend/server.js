@@ -57,11 +57,12 @@ app.post('/call', async (req, res) => {
       from: BLAND_FROM_NUMBER,
       task: task,
       first_sentence: firstSentence,
-      voice: "maya",        // Using Bland's built-in voice (no ElevenLabs needed)
+      voice: "maya",
       amd: false,
       wait_for_greeting: false,
       record: false,
       language: "en-US",
+      local_dialing: true,   // Routes via local infrastructure — avoids spam block
     };
 
     console.log(`☎️ Calling: ${cleanPhone} | From: ${BLAND_FROM_NUMBER} | Key: ${BLAND_API_KEY.substring(0, 8)}...`);
