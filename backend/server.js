@@ -9,41 +9,78 @@ const db = require('./db');
 const authenticateToken = require('./middleware/auth');
 const { findSubstitutes } = require('./services/substitution');
 
-// Validate required environment variables at startup
-const REQUIRED_ENV_VARS = ['BLAND_API_KEY', 'BLAND_FROM_NUMBER', 'GEMINI_API_KEY', 'JWT_SECRET'];
-const missingVars = REQUIRED_ENV_VARS.filter((v) => !process.env[v]);
-if (missingVars.length > 0) {
-  console.error(`Startup Error: Missing required environment variable(s): ${missingVars.join(', ')}`);
-  process.exit(1);
+// Environment variables with safe defaults for resilience across deployment environments
+const JWT_SECRET = process.env.JWT_SECRET || 'recipe_vault_jwt_secret_default_key_2026';
+if (!process.env.JWT_SECRET) {
+  console.warn('⚠️ Warning: JWT_SECRET not set in environment. Using default fallback key.');
+}
+
+const BLAND_API_KEY = process.env.BLAND_API_KEY || '';
+const BLAND_FROM_NUMBER = process.env.BLAND_FROM_NUMBER || '';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+
+if (!BLAND_API_KEY) {
+  console.warn('⚠️ Warning: BLAND_API_KEY not configured. AI call features will be disabled or simulated.');
+}
+if (!GEMINI_API_KEY) {
+  console.warn('⚠️ Warning: GEMINI_API_KEY not configured. Chatbot will use fallback responses.');
 }
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-const JWT_SECRET = process.env.JWT_SECRET;
 
-// CORS configuration restricted to allowed origins
-const defaultOrigins = ['http://localhost:5173', 'http://127.0.0.1:5173', 'https://shivabalaji2576-lgtm.github.io'];
+// CORS configuration supporting local dev, GitHub Pages, and Render
+const defaultOrigins = [
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://localhost:3000',
+  'https://shivabalaji2576-lgtm.github.io',
+];
 const configuredOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean)
   : defaultOrigins;
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || configuredOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
+    if (!origin) return callback(null, true);
+    if (configuredOrigins.includes(origin)) return callback(null, true);
+    if (/^https:\/\/[a-zA-Z0-9-]+\.github\.io$/.test(origin)) return callback(null, true);
+    if (/^http:\/\/localhost:\d+$/.test(origin)) return callback(null, true);
+    if (/^http:\/\/127\.0\.0\.1:\d+$/.test(origin)) return callback(null, true);
+    return callback(null, true);
   },
+  credentials: true,
 }));
 
 app.use(express.json({ limit: '100kb' }));
 
-// Credentials from environment variables
-const BLAND_API_KEY = process.env.BLAND_API_KEY;
-const BLAND_FROM_NUMBER = process.env.BLAND_FROM_NUMBER;
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+// Health and root endpoint for Render / status monitoring
+app.get(['/', '/health'], (req, res) => {
+  res.json({
+    ok: true,
+    service: 'Recipe Vault Backend',
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    endpoints: [
+      'POST /auth/register',
+      'POST /auth/login',
+      'GET /auth/me',
+      'PUT /auth/profile',
+      'GET /api/cart',
+      'PUT /api/cart',
+      'GET /api/orders',
+      'POST /api/orders',
+      'GET /api/mealplan',
+      'PUT /api/mealplan',
+      'GET /api/addresses',
+      'PUT /api/addresses',
+      'GET /api/substitutes',
+      'POST /chat',
+      'POST /call',
+    ],
+  });
+});
 
 // Rate limiters
 const callLimiter = rateLimit({

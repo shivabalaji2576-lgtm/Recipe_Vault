@@ -16,15 +16,34 @@ async function request(endpoint, options = {}) {
     ...(options.headers || {}),
   };
 
-  const res = await fetch(`${BACKEND_URL}${endpoint}`, {
-    ...options,
-    headers,
-  });
+  let res;
+  try {
+    res = await fetch(`${BACKEND_URL}${endpoint}`, {
+      ...options,
+      headers,
+    });
+  } catch (netErr) {
+    const err = new Error(
+      `Unable to connect to backend (${BACKEND_URL}). Please ensure the server is active.`
+    );
+    err.status = 0;
+    err.original = netErr;
+    throw err;
+  }
 
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    const errorMsg = data?.error || `Request failed with status ${res.status}`;
+    let errorMsg = data?.error;
+    if (!errorMsg) {
+      if (res.status === 404) {
+        errorMsg = `Backend service returned 404. If the cloud backend is deploying on Render, please allow 1–2 minutes and retry.`;
+      } else if (res.status === 502 || res.status === 503) {
+        errorMsg = `Backend server is waking up (${res.status}). Please retry in a few moments.`;
+      } else {
+        errorMsg = `Request failed with status ${res.status}`;
+      }
+    }
     const err = new Error(errorMsg);
     err.status = res.status;
     err.data = data;
