@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useContext } from "react";
-import { Ctx, RESTAURANTS } from "../constants";
+import { Ctx } from "../../context";
+import { RESTAURANTS } from "../../config";
 
 /* ═══════════════════════════
    MAP PAGE  –  Component 5

@@ -1,20 +1,21 @@
-import { useState, useContext } from "react";
+import { useState, useEffect, useContext } from "react";
 import "./App.css";
 
 /* ── Shared context, constants, helpers ── */
-import {
-  Ctx,
-  DAYS, MEAL_TYPES, DELIVERY,
-  getPrice, buildOrderEmail, sendDirectEmail, sendOrderConfirmationCall,
-} from "./Components/constants";
+import { Ctx } from "./context";
+import { DAYS, MEAL_TYPES } from "./config";
+import { getPrice } from "./helpers";
+import { useLocalStorage } from "./hooks/useLocalStorage";
+import * as api from "./services/api";
+import { placeUserOrder, getTodayMeals } from "./services/orders";
 
-/* ── Component 1 : Login ── */
+
 import LoginPage from "./Components/LoginPage";
 
 /* ── Component 2 : Explore + Detail ── */
 import ExplorePage, { DetailPage } from "./Components/ExplorePage";
 
-/* ── Component 3 : Planner + Shopping ── */
+
 import PlannerPage, { ShoppingPage } from "./Components/PlannerShoppingPage";
 
 /* ── Component 4 : Orders ── */
@@ -33,44 +34,62 @@ import CartPage, { CartDrawer } from "./Components/CartPage";
 import ChatBot from "./Components/ChatBot";
 
 /* ─────────────────────────────────────
-   HELPERS
-───────────────────────────────────── */
-const USER_KEYS = [
-  "rv_cart", "rv_order_history", "rv_mealplan",
-  "rv_autoon", "rv_addresses", "rv_default_addr", "rv_city",
-];
-
-function clearUserData() {
-  USER_KEYS.forEach(k => localStorage.removeItem(k));
-}
-
-/* ─────────────────────────────────────
    ROOT
 ───────────────────────────────────── */
 export default function App() {
-  const [auth, setAuth] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("rv_auth")) || null; }
-    catch { return null; }
-  });
+  const [token, setToken] = useLocalStorage("rv_token", null);
+  const [auth, setAuth] = useState(null);
+  const [authLoading, setAuthLoading] = useState(() => Boolean(token));
 
-  const handleLogin = u => {
-    const prev = localStorage.getItem("rv_current_user");
-    if (prev && prev !== u.email) clearUserData();
-    localStorage.setItem("rv_current_user", u.email);
-    localStorage.setItem("rv_auth", JSON.stringify(u));
+  useEffect(() => {
+    if (!token) return;
+
+    let isMounted = true;
+    api.getMe()
+      .then(data => {
+        if (!isMounted) return;
+        if (data?.user) {
+          setAuth(data.user);
+        } else {
+          setToken(null);
+          setAuth(null);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setToken(null);
+          setAuth(null);
+        }
+      })
+      .finally(() => {
+        if (isMounted) setAuthLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [token, setToken]);
+
+  const handleLogin = (u) => {
     setAuth(u);
   };
 
   const handleLogout = () => {
-    localStorage.removeItem("rv_auth");
+    setToken(null);
     setAuth(null);
   };
 
   const handleUpdateAuth = u => {
-    localStorage.setItem("rv_auth", JSON.stringify(u));
-    localStorage.setItem("rv_current_user", u.email);
     setAuth(u);
   };
+
+  if (authLoading) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh" }}>
+        <div className="spinner" />
+      </div>
+    );
+  }
 
   if (!auth) return <LoginPage onLogin={handleLogin} />;
 
@@ -83,62 +102,83 @@ export default function App() {
   );
 }
 
+
 /* ─────────────────────────────────────
    MAIN APP
 ───────────────────────────────────── */
 function MainApp({ auth, onLogout, onUpdateAuth }) {
-  const [page,        setPage]        = useState("home");
-  const [detailId,    setDetailId]    = useState(null);
-  const [toast,       setToast]       = useState(null);
-  const [sending,     setSending]     = useState(false);
-  const [cartOpen,    setCartOpen]    = useState(false);
+  const [page, setPage] = useState("home");
+  const [detailId, setDetailId] = useState(null);
+  const [toast, setToast] = useState(null);
+  const [sending, setSending] = useState(false);
+  const [cartOpen, setCartOpen] = useState(false);
   const [orderPlaced, setOrderPlaced] = useState(false);
-  const [calling,     setCalling]     = useState(false);
+  const [calling] = useState(false);
 
-  const [cart, setCart] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("rv_cart")) || []; }
-    catch { return []; }
-  });
-  const saveCart = list => {
-    setCart(list);
-    try { localStorage.setItem("rv_cart", JSON.stringify(list)); } catch (e) { console.error("Error saving rv_cart", e); }
-  };
-
-  const [orderHistory, setOrderHistory] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("rv_order_history")) || []; }
-    catch { return []; }
-  });
-  const saveHistory = list => {
-    setOrderHistory(list);
-    try { localStorage.setItem("rv_order_history", JSON.stringify(list)); } catch (e) { console.error("Error saving rv_order_history", e); }
-  };
-
-  const [mealPlan, setMealPlan] = useState(() => {
-    try {
-      const s = JSON.parse(localStorage.getItem("rv_mealplan"));
-      if (s) return s;
-    } catch (e) { console.error("Error parsing rv_mealplan", e); }
-    return Object.fromEntries(
-      DAYS.map(d => [d, Object.fromEntries(MEAL_TYPES.map(t => [t, null]))])
-    );
-  });
-  const saveMealPlan = plan => {
-    setMealPlan(plan);
-    try { localStorage.setItem("rv_mealplan", JSON.stringify(plan)); } catch (e) { console.error("Error saving rv_mealplan", e); }
-  };
-
-  const [autoOn, setAutoOn] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("rv_autoon")) ?? false; }
-    catch { return false; }
-  });
-  const saveAutoOn = val => {
-    setAutoOn(val);
-    try { localStorage.setItem("rv_autoon", JSON.stringify(val)); } catch (e) { console.error("Error saving rv_autoon", e); }
-  };
+  const [dataLoading, setDataLoading] = useState(true);
+  const [cart, setCart] = useState([]);
+  const [orderHistory, setOrderHistory] = useState([]);
+  const defaultPlan = Object.fromEntries(
+    DAYS.map(d => [d, Object.fromEntries(MEAL_TYPES.map(t => [t, null]))])
+  );
+  const [mealPlan, setMealPlan] = useState(defaultPlan);
+  const [autoOn, setAutoOn] = useState(false);
 
   const showToast = (msg, type = "success", ms = 4000) => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), ms);
+  };
+
+  useEffect(() => {
+    let isMounted = true;
+    Promise.all([
+      api.getCart().catch(() => []),
+      api.getOrders().catch(() => []),
+      api.getMealPlan().catch(() => ({ mealPlan: null, autoOn: false })),
+    ]).then(([fetchedCart, fetchedOrders, fetchedPlan]) => {
+      if (!isMounted) return;
+      if (Array.isArray(fetchedCart)) setCart(fetchedCart);
+      if (Array.isArray(fetchedOrders)) setOrderHistory(fetchedOrders);
+      if (fetchedPlan?.mealPlan && Object.keys(fetchedPlan.mealPlan).length > 0) {
+        setMealPlan(fetchedPlan.mealPlan);
+      }
+      if (typeof fetchedPlan?.autoOn === "boolean") {
+        setAutoOn(fetchedPlan.autoOn);
+      }
+    }).finally(() => {
+      if (isMounted) setDataLoading(false);
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const saveCart = async list => {
+    setCart(list);
+    try {
+      await api.saveCart(list);
+    } catch {
+      showToast("Failed to save cart to server", "error");
+    }
+  };
+
+  const saveMealPlan = async plan => {
+    setMealPlan(plan);
+    try {
+      await api.saveMealPlan(plan, autoOn);
+    } catch {
+      showToast("Failed to save meal plan", "error");
+    }
+  };
+
+  const saveAutoOn = async val => {
+    setAutoOn(val);
+    try {
+      await api.saveMealPlan(mealPlan, val);
+    } catch {
+      showToast("Failed to update auto-order setting", "error");
+    }
   };
 
   const nav = (p, id = null) => {
@@ -149,7 +189,7 @@ function MainApp({ auth, onLogout, onUpdateAuth }) {
 
   const addToCart = meal => {
     const price = meal.price || getPrice(meal);
-    const ex    = cart.find(c => c.idMeal === meal.idMeal);
+    const ex = cart.find(c => c.idMeal === meal.idMeal);
     saveCart(
       ex
         ? cart.map(c => c.idMeal === meal.idMeal ? { ...c, qty: c.qty + 1 } : c)
@@ -169,35 +209,29 @@ function MainApp({ auth, onLogout, onUpdateAuth }) {
     if (!cart.length) return;
     setSending(true);
     showToast("📤 Sending confirmation email…", "info", 2500);
-    const { subject, body } = buildOrderEmail(auth, cart);
-    const result = await sendDirectEmail(auth.email, auth.name, subject, body);
-    const total  = cart.reduce((s, c) => s + c.qty * (c.price || getPrice(c)), 0) + DELIVERY;
-    saveHistory([
-      ...orderHistory,
-      { id: `ord_${Date.now()}`, items: [...cart], total, date: new Date().toISOString() },
-    ]);
+
+    const result = await placeUserOrder({ auth, items: cart });
+    if (result.ok && result.order) {
+      setOrderHistory(prev => [result.order, ...prev]);
+    }
     setSending(false);
     setOrderPlaced(true);
-    
-    // Trigger AI phone call
-    if (auth.phone) {
-      setCalling(true);
-      showToast("📞 Dialing your phone...", "info", 3000);
-      const callRes = await sendOrderConfirmationCall(auth.phone, auth.name, cart);
-      setCalling(false);
-      if (callRes.ok) {
-        showToast("✅ AI Call initiated! Check your phone.", "success");
-      } else {
-        console.error("Call Failed:", callRes.msg);
-        showToast(`⚠️ AI Call failed: ${callRes.msg}`, "info");
-      }
-    } else {
-      showToast("⚠️ No phone number in profile. Skipping call.", "info");
+
+    if (result.orderSaved === false) {
+      showToast("Failed to save order to server", "error");
     }
 
-    result.ok
-      ? showToast(`✅ Order confirmed! Email sent to ${auth.email}`, "success")
-      : showToast("✅ Order placed!", "success");
+    if (result.callResult && !result.callResult.ok) {
+      showToast(`⚠️ AI Call notice: ${result.callResult.msg}`, "info");
+    } else if (result.callResult?.ok) {
+      showToast("✅ AI Call initiated! Check your phone.", "success");
+    }
+
+    if (result.emailResult?.ok) {
+      showToast(`✅ Order confirmed! Email sent to ${auth.email}`, "success");
+    } else {
+      showToast("✅ Order placed!", "success");
+    }
   };
 
   const addToPlanner = (meal, day, type) =>
@@ -207,11 +241,9 @@ function MainApp({ auth, onLogout, onUpdateAuth }) {
     saveMealPlan({ ...mealPlan, [day]: { ...mealPlan[day], [type]: null } });
 
   const autoOrderToday = async () => {
-    const di    = new Date().getDay();
-    const today = DAYS[di === 0 ? 6 : di - 1];
-    const meals = Object.values(mealPlan[today]).filter(Boolean);
+    const { today, meals } = getTodayMeals(mealPlan);
     if (!meals.length) return false;
-    const items  = meals.map(m => ({ ...m, price: getPrice(m), qty: 1 }));
+    const items = meals.map(m => ({ ...m, price: getPrice(m), qty: 1 }));
     const merged = [...cart];
     items.forEach(m => {
       const ex = merged.find(c => c.idMeal === m.idMeal);
@@ -220,22 +252,21 @@ function MainApp({ auth, onLogout, onUpdateAuth }) {
     saveCart(merged);
     setSending(true);
     showToast("📤 Sending email…", "info", 2000);
-    const { subject, body } = buildOrderEmail(auth, items);
-    const result = await sendDirectEmail(auth.email, auth.name, subject, body);
+
+    const result = await placeUserOrder({ auth, items });
     setSending(false);
 
-    // Trigger AI phone call for auto-orders too
-    if (auth.phone) {
-      setCalling(true);
-      const callRes = await sendOrderConfirmationCall(auth.phone, auth.name, items);
-      setCalling(false);
+    if (result.orderSaved === false) {
+      showToast("Failed to save auto-order to server", "error");
     }
 
-    if (result.ok) showToast(`✅ ${meals.length} meal(s) for ${today} added! Email sent`, "success");
+    if (result.emailResult?.ok) {
+      showToast(`✅ ${meals.length} meal(s) for ${today} added! Email sent`, "success");
+    }
     return today;
   };
 
-  const cartCount    = cart.reduce((s, c) => s + c.qty, 0);
+  const cartCount = cart.reduce((s, c) => s + c.qty, 0);
   const plannedCount = Object.values(mealPlan).reduce(
     (s, d) => s + Object.values(d).filter(Boolean).length, 0
   );
@@ -243,15 +274,36 @@ function MainApp({ auth, onLogout, onUpdateAuth }) {
   const ctxValue = {
     auth,
     nav,
-    mealPlan, addToPlanner, clearSlot,
-    cart, addToCart, removeFromCart, updateQty, clearCart,
-    placeOrder, orderPlaced, setOrderPlaced,
+    cart,
+    addToCart,
+    removeFromCart,
+    updateQty,
+    clearCart,
+    cartCount,
+    cartOpen,
+    setCartOpen,
     orderHistory,
-    autoOn, setAutoOn: saveAutoOn, autoOrderToday,
-    showToast, sending,
-    cartOpen, setCartOpen,
+    orderPlaced,
+    placeOrder,
+    mealPlan,
+    addToPlanner,
+    clearSlot,
+    plannedCount,
+    autoOn,
+    saveAutoOn,
+    autoOrderToday,
+    sending,
     calling,
+    showToast,
   };
+
+  if (dataLoading) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh" }}>
+        <div className="spinner" />
+      </div>
+    );
+  }
 
   return (
     <Ctx.Provider value={ctxValue}>
@@ -260,7 +312,7 @@ function MainApp({ auth, onLogout, onUpdateAuth }) {
         {toast && (
           <div className={`order-toast toast-${toast.type}`}>
             <span className="toast-icon">
-              {toast.type === "success" ? "✅" : toast.type === "info" ? "📤" : "⚠️"}
+              {toast.type === "success" ? "✅" : toast.type === "info" ? "📤" : toast.type === "error" ? "❌" : "⚠️"}
             </span>
             <span className="toast-msg">{toast.msg}</span>
           </div>
@@ -276,18 +328,21 @@ function MainApp({ auth, onLogout, onUpdateAuth }) {
         />
 
         <main className="main">
-          {page === "home"     && <ExplorePage />}
-          {page === "detail"   && <DetailPage mealId={detailId} />}
-          {page === "cart"     && <CartPage />}
-          {page === "planner"  && <PlannerPage />}
+          {page === "home" && <ExplorePage />}
+          {page === "detail" && <DetailPage mealId={detailId} />}
+          {page === "cart" && <CartPage />}
+          {page === "planner" && <PlannerPage />}
           {page === "shopping" && <ShoppingPage />}
-          {page === "orders"   && <OrdersPage />}
-          {page === "map"      && <MapPage />}
-          {page === "profile"  && (
+          {page === "orders" && <OrdersPage />}
+          {page === "map" && <MapPage />}
+          {page === "profile" && (
             <ProfilePage
               auth={auth}
               onLogout={onLogout}
               onUpdateAuth={onUpdateAuth}
+              orderHistory={orderHistory}
+              cart={cart}
+              mealPlan={mealPlan}
             />
           )}
         </main>
@@ -307,12 +362,12 @@ function AppHeader({ page, nav, cartCount, plannedCount, auth, onLogout }) {
   const { setCartOpen, calling } = useContext(Ctx);
 
   const tabs = [
-    { id: "home",     label: "🍽 Explore" },
-    { id: "planner",  label: "📅 Planner",  badge: plannedCount },
+    { id: "home", label: "🍽 Explore" },
+    { id: "planner", label: "📅 Planner", badge: plannedCount },
     { id: "shopping", label: "🛒 Shopping" },
-    { id: "orders",   label: "📋 Orders" },
-    { id: "map",      label: "🗺️ Map" },
-    { id: "profile",  label: "👤 Profile" },
+    { id: "orders", label: "📋 Orders" },
+    { id: "map", label: "🗺️ Map" },
+    { id: "profile", label: "👤 Profile" },
   ];
 
   return (
@@ -334,34 +389,26 @@ function AppHeader({ page, nav, cartCount, plannedCount, auth, onLogout }) {
               className={`nav-tab${page === t.id ? " nav-tab-on" : ""}`}
               onClick={() => nav(t.id)}>
               {t.label}
-              {t.badge > 0 && <span className="nav-badge">{t.badge}</span>}
+              {Boolean(t.badge) && <span className="nav-badge">{t.badge}</span>}
             </button>
           ))}
         </nav>
 
-        <div className="hdr-right">
-          <button className="hdr-cart-btn" onClick={() => setCartOpen(true)} title="Open Cart">
-            <span className="hdr-cart-ico">🛒</span>
-            <span className="hdr-cart-txt">Cart</span>
-            {cartCount > 0 && <span className="hdr-cart-badge">{cartCount}</span>}
+        <div className="hdr-actions">
+          <button className="btn-cart-nav" onClick={() => setCartOpen(true)}>
+            🛒 <span className="cart-badge">{cartCount}</span>
           </button>
-
-          <div className="hdr-user">
-            {calling && (
-              <div className="ai-status">
-                <div className="ai-pulse" />
-                <span>AI Calling...</span>
-              </div>
-            )}
-            <div className="user-avatar" onClick={() => nav("profile")} style={{ cursor: "pointer" }}>
-              {auth.name[0].toUpperCase()}
-            </div>
-            <div className="user-info">
-              <span className="user-name">{auth.name}</span>
-              <span className="user-email">{auth.email}</span>
-            </div>
-            <button className="logout-btn" onClick={onLogout}>↩ Out</button>
-          </div>
+          {calling && (
+            <span className="hdr-calling-indicator" title="AI Call in progress">
+              <span className="calling-dot" /> 📞 Calling...
+            </span>
+          )}
+          <span className="hdr-user-chip">
+            🌿 {auth.name.split(" ")[0]}
+          </span>
+          <button className="btn-logout" onClick={onLogout} title="Sign Out">
+            ↪
+          </button>
         </div>
 
       </div>

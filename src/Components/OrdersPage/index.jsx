@@ -1,5 +1,7 @@
 import { useContext } from "react";
-import { Ctx, DELIVERY, fmt, getPrice } from "../constants";
+import { Ctx } from "../../context";
+import { DELIVERY } from "../../config";
+import { fmt, getPrice } from "../../helpers";
 
 /* ═══════════════════════════
    ORDER HISTORY PAGE  –  Component 4

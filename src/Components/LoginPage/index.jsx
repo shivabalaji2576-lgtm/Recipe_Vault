@@ -1,16 +1,9 @@
 import { useState } from "react";
+import { loginUser, registerUser } from "../../services/api";
 
 /* ═══════════════════════════
    LOGIN PAGE  –  Component 1
 ═══════════════════════════ */
-
-function clearUserData() {
-  const USER_KEYS = [
-    "rv_cart", "rv_order_history", "rv_mealplan",
-    "rv_autoon", "rv_addresses", "rv_default_addr", "rv_city",
-  ];
-  USER_KEYS.forEach(k => localStorage.removeItem(k));
-}
 
 export default function LoginPage({ onLogin }) {
   const [tab, setTab] = useState("login");
@@ -21,17 +14,7 @@ export default function LoginPage({ onLogin }) {
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const getAcc = () => {
-    try { return JSON.parse(localStorage.getItem("rv_accounts")) || {}; }
-    catch { return {}; }
-  };
-  const saveAcc = (e, p, n, ph) => {
-    const a = getAcc();
-    a[e] = { password: p, name: n, phone: ph };
-    localStorage.setItem("rv_accounts", JSON.stringify(a));
-  };
-
-  const submit = () => {
+  const submit = async () => {
     setErr("");
     if (!email.includes("@") || !email.includes(".")) { setErr("Enter a valid email."); return; }
     if (pass.length < 6) { setErr("Password must be ≥ 6 characters."); return; }
@@ -39,21 +22,27 @@ export default function LoginPage({ onLogin }) {
     if (tab === "signup") {
       if (!name.trim()) { setErr("Please enter your name."); return; }
       if (!phone.trim()) { setErr("Please enter your phone number."); return; }
-      const a = getAcc();
-      if (a[email]) { setErr("Account exists. Sign in."); return; }
       setBusy(true);
-      setTimeout(() => {
-        saveAcc(email, pass, name, phone);
-        clearUserData();
-        onLogin({ email, name, phone });
+      try {
+        const data = await registerUser(email, pass, name, phone);
+        localStorage.setItem("rv_token", data.token);
+        onLogin(data.user);
+      } catch (e) {
+        setErr(e.message || "Failed to create account.");
+      } finally {
         setBusy(false);
-      }, 700);
+      }
     } else {
-      const a = getAcc();
-      if (!a[email]) { setErr("No account found. Sign up."); return; }
-      if (a[email].password !== pass) { setErr("Incorrect password."); return; }
       setBusy(true);
-      setTimeout(() => { onLogin({ email, name: a[email].name, phone: a[email].phone }); setBusy(false); }, 700);
+      try {
+        const data = await loginUser(email, pass);
+        localStorage.setItem("rv_token", data.token);
+        onLogin(data.user);
+      } catch (e) {
+        setErr(e.message || "Login failed.");
+      } finally {
+        setBusy(false);
+      }
     }
   };
 
@@ -76,7 +65,7 @@ export default function LoginPage({ onLogin }) {
             { i: "📧", t: "Direct Email Confirmation" },
             { i: "📅", t: "Breakfast · Lunch · Dinner Planner" },
             { i: "🗺️", t: "Hyderabad Restaurant Map" },
-            { i: "💾", t: "Account saved locally" },
+            { i: "🔒", t: "Secure JWT Authentication" },
           ].map(f => (
             <div key={f.t} className="ll-feat">
               <span className="ll-feat-ico">{f.i}</span>
@@ -140,7 +129,7 @@ export default function LoginPage({ onLogin }) {
               {tab === "login" ? "Create account" : "Sign in"}
             </button>
           </p>
-          <p className="login-storage-note">💾 Your session is saved locally.</p>
+          <p className="login-storage-note">🔒 Protected with secure authentication.</p>
         </div>
       </div>
     </div>

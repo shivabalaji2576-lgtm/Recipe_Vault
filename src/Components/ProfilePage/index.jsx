@@ -1,10 +1,14 @@
-import { useState, useContext } from "react";
-import { Ctx, ADDRESS_LABELS, ADDRESS_LABEL_ICONS } from "../constants";
+import { useState, useContext, useEffect } from "react";
+import { Ctx } from "../../context";
+import { ADDRESS_LABELS, ADDRESS_LABEL_ICONS } from "../../config";
+import { useLocalStorage } from "../../hooks/useLocalStorage";
+import sendOrderConfirmationCall from "../../services/orderCall";
+import * as api from "../../services/api";
 
 /* ═══════════════════════════
    PROFILE PAGE  –  Component 6
 ═══════════════════════════ */
-export default function ProfilePage({ auth, onLogout, onUpdateAuth }) {
+export default function ProfilePage({ auth, onLogout, onUpdateAuth, orderHistory = [], cart = [], mealPlan = null }) {
   const { nav, calling, showToast } = useContext(Ctx);
 
   const [editingName, setEditingName] = useState(false);
@@ -16,16 +20,16 @@ export default function ProfilePage({ auth, onLogout, onUpdateAuth }) {
   const [phoneInput,   setPhoneInput]   = useState(auth.phone || "");
   const [phoneSaved,   setPhoneSaved]   = useState(false);
 
-  /* ── City editing ── */
+  /* ── City editing (Kept in localStorage via useLocalStorage) ── */
+  const [cityStorage, setCityStorage] = useLocalStorage("rv_city", "Hyderabad, Telangana");
   const [editingCity, setEditingCity] = useState(false);
-  const [cityInput,   setCityInput]   = useState(() => {
-    try { return localStorage.getItem("rv_city") || "Hyderabad, Telangana"; } catch { return "Hyderabad, Telangana"; }
-  });
+  const [cityInput,   setCityInput]   = useState(cityStorage);
   const [citySaved, setCitySaved] = useState(false);
 
-  /* ── Address management ── */
-  const [addresses,     setAddresses]     = useState(() => { try { return JSON.parse(localStorage.getItem("rv_addresses")) || []; } catch { return []; } });
-  const [defaultAddr,   setDefaultAddr]   = useState(() => { try { return localStorage.getItem("rv_default_addr") || ""; } catch { return ""; } });
+  /* ── Address management (Loaded from Backend) ── */
+  const [addresses,     setAddresses]     = useState([]);
+  const [defaultAddr,   setDefaultAddr]   = useState("");
+  const [addrLoading,   setAddrLoading]   = useState(true);
   const [showForm,      setShowForm]      = useState(false);
   const [editIndex,     setEditIndex]     = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
@@ -35,49 +39,86 @@ export default function ProfilePage({ auth, onLogout, onUpdateAuth }) {
   const [form,    setForm]    = useState(EMPTY);
   const [formErr, setFormErr] = useState({});
 
-  /* ── Quick stats helpers ── */
-  const ordH    = () => { try { return JSON.parse(localStorage.getItem("rv_order_history")) || []; } catch { return []; } };
-  const cartD   = () => { try { return JSON.parse(localStorage.getItem("rv_cart")) || []; } catch { return []; } };
-  const mpD     = () => { try { return JSON.parse(localStorage.getItem("rv_mealplan")); } catch { return null; } };
+  /* ── Quick stats helpers (Props from backend) ── */
+  const ordH    = () => orderHistory || [];
+  const cartD   = () => cart || [];
+  const mpD     = () => mealPlan || null;
   const plannedCnt = (() => {
     const mp = mpD();
     return mp ? Object.values(mp).reduce((s, d) => s + Object.values(d).filter(Boolean).length, 0) : 0;
   })();
 
-  /* ── Persist helpers ── */
-  const persist    = list => { setAddresses(list); localStorage.setItem("rv_addresses", JSON.stringify(list)); };
-  const persistDef = id   => { setDefaultAddr(id); localStorage.setItem("rv_default_addr", id); };
+  /* ── Load addresses from backend ── */
+  useEffect(() => {
+    let isMounted = true;
+    api.getAddresses()
+      .then(res => {
+        if (!isMounted) return;
+        setAddresses(res.addresses || []);
+        setDefaultAddr(res.defaultAddr || "");
+      })
+      .catch(() => {
+        if (isMounted) showToast?.("Failed to load addresses from server", "error");
+      })
+      .finally(() => {
+        if (isMounted) setAddrLoading(false);
+      });
 
-  const saveName = () => {
+    return () => { isMounted = false; };
+  }, [showToast]);
+
+  /* ── Persist helpers ── */
+  const persist = async list => {
+    setAddresses(list);
+    try {
+      await api.saveAddresses(list, defaultAddr);
+    } catch {
+      showToast?.("Failed to save addresses to server", "error");
+    }
+  };
+
+  const persistDef = async id => {
+    setDefaultAddr(id);
+    try {
+      await api.saveAddresses(addresses, id);
+    } catch {
+      showToast?.("Failed to save default address", "error");
+    }
+  };
+
+  const saveName = async () => {
     if (!nameInput.trim()) return;
     const u = { ...auth, name: nameInput.trim() };
     onUpdateAuth(u);
     try {
-      const a = JSON.parse(localStorage.getItem("rv_accounts")) || {};
-      if (a[auth.email]) a[auth.email].name = u.name;
-      localStorage.setItem("rv_accounts", JSON.stringify(a));
-    } catch (e) { console.error("Error saving account:", e); }
-    setEditingName(false); setNameSaved(true);
+      await api.updateProfile(u.name, u.phone);
+    } catch {
+      showToast?.("Failed to update name on server", "error");
+    }
+    setEditingName(false);
+    setNameSaved(true);
     setTimeout(() => setNameSaved(false), 2500);
   };
 
-  const savePhone = () => {
+  const savePhone = async () => {
     if (!phoneInput.trim()) return;
     const u = { ...auth, phone: phoneInput.trim() };
     onUpdateAuth(u);
     try {
-      const a = JSON.parse(localStorage.getItem("rv_accounts")) || {};
-      if (a[auth.email]) a[auth.email].phone = u.phone;
-      localStorage.setItem("rv_accounts", JSON.stringify(a));
-    } catch (e) { console.error("Error saving account:", e); }
-    setEditingPhone(false); setPhoneSaved(true);
+      await api.updateProfile(u.name, u.phone);
+    } catch {
+      showToast?.("Failed to update phone on server", "error");
+    }
+    setEditingPhone(false);
+    setPhoneSaved(true);
     setTimeout(() => setPhoneSaved(false), 2500);
   };
 
   const saveCity = () => {
     if (!cityInput.trim()) return;
-    localStorage.setItem("rv_city", cityInput.trim());
-    setEditingCity(false); setCitySaved(true);
+    setCityStorage(cityInput.trim());
+    setEditingCity(false);
+    setCitySaved(true);
     setTimeout(() => setCitySaved(false), 2500);
   };
 
@@ -206,7 +247,6 @@ export default function ProfilePage({ auth, onLogout, onUpdateAuth }) {
                           style={{ background: "var(--soft)", color: "var(--green)", opacity: calling ? 0.6 : 1 }}
                           disabled={calling}
                           onClick={async () => {
-                            const { sendOrderConfirmationCall } = await import("../constants");
                             showToast("📞 Testing AI Call...", "info");
                             await sendOrderConfirmationCall(auth.phone, auth.name, [{ qty: 1, strMeal: "Test Recipe" }]);
                           }}
@@ -227,10 +267,10 @@ export default function ProfilePage({ auth, onLogout, onUpdateAuth }) {
                       onChange={e => setCityInput(e.target.value)}
                       onKeyDown={e => {
                         if (e.key === "Enter") saveCity();
-                        if (e.key === "Escape") { setEditingCity(false); setCityInput(localStorage.getItem("rv_city") || "Hyderabad, Telangana"); }
+                        if (e.key === "Escape") { setEditingCity(false); setCityInput(cityStorage); }
                       }} />
                     <button className="pfield-save" onClick={saveCity}>Save</button>
-                    <button className="pfield-discard" onClick={() => { setEditingCity(false); setCityInput(localStorage.getItem("rv_city") || "Hyderabad, Telangana"); }}>✕</button>
+                    <button className="pfield-discard" onClick={() => { setEditingCity(false); setCityInput(cityStorage); }}>✕</button>
                   </div>
                 ) : (
                   <div className="pfield-view-row">
@@ -276,7 +316,7 @@ export default function ProfilePage({ auth, onLogout, onUpdateAuth }) {
           <div className="pcard">
             <div className="pcard-hdr"><span className="pcard-hdr-icon">⚙️</span><h2 className="pcard-hdr-title">Account Actions</h2></div>
             <div className="pcard-body">
-              <p className="pdanger-desc">Signing out keeps your data saved locally.</p>
+              <p className="pdanger-desc">Signing out keeps your data securely saved on the server.</p>
               <button className="pdanger-btn" onClick={onLogout}>↩ Sign Out</button>
             </div>
           </div>
@@ -327,7 +367,11 @@ export default function ProfilePage({ auth, onLogout, onUpdateAuth }) {
             {/* Address list */}
             {!showForm && (
               <div className="paddr-list">
-                {addresses.length === 0 ? (
+                {addrLoading ? (
+                  <div style={{ padding: "40px", display: "flex", justifyContent: "center" }}>
+                    <div className="spinner" />
+                  </div>
+                ) : addresses.length === 0 ? (
                   <div className="paddr-empty">
                     <div className="paddr-empty-ico">🏠</div>
                     <p className="paddr-empty-title">No addresses saved</p>

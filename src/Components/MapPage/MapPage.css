@@ -1,0 +1,203 @@
+﻿.map-page {
+  padding-top: 28px;
+}
+
+.map-wrapper {
+  position: relative;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 2px solid var(--border);
+  margin-bottom: 32px;
+  box-shadow: var(--shadow);
+  height: 460px;
+}
+
+.leaflet-map-container {
+  width: 100%;
+  height: 100%;
+}
+
+.map-loading-overlay {
+  position: absolute;
+  inset: 0;
+  background: var(--soft);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.restaurants-section-title {
+  font-family: var(--serif);
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 20px;
+}
+
+.restaurants-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.restaurant-card {
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  display: flex;
+  gap: 14px;
+  cursor: pointer;
+  transition: transform .18s, box-shadow .18s;
+}
+
+.restaurant-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 28px rgba(15, 32, 16, .1);
+}
+
+.restaurant-card-selected {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px rgba(42, 112, 64, .12);
+}
+
+.rest-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.rest-avatar-letter {
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+  font-family: var(--serif);
+}
+
+.rest-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.rest-top-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.rest-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  font-family: var(--serif);
+  line-height: 1.2;
+}
+
+.rest-rating {
+  font-size: 13px;
+  font-weight: 600;
+  color: #b87800;
+  white-space: nowrap;
+}
+
+.rest-cuisine {
+  font-size: 12px;
+  color: var(--green);
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.rest-address {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 3px;
+}
+
+.rest-hours {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.rest-auto-msg {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--green);
+  background: #e8f8e8;
+  padding: 5px 10px;
+  border-radius: 7px;
+  margin-bottom: 9px;
+  border: 1px solid #b8e8b8;
+}
+
+.rest-actions {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.rest-map-btn {
+  flex: 1;
+  padding: 8px;
+  border: 1.5px solid var(--green);
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--green);
+  cursor: pointer;
+  text-align: center;
+  transition: background .15s;
+  white-space: nowrap;
+}
+
+.rest-map-btn:hover {
+  background: #edf8e5;
+}
+
+.rest-auto-btn {
+  flex: 1.2;
+  padding: 8px;
+  background: #1e5530;
+  border: none;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  cursor: pointer;
+  text-align: center;
+  transition: background .15s;
+  white-space: nowrap;
+}
+
+.rest-auto-btn:hover {
+  background: #164025;
+}
+
+.rest-order-btn {
+  flex: 1;
+  padding: 8px;
+  background: var(--green);
+  border: none;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  cursor: pointer;
+  text-align: center;
+  transition: background .15s;
+  white-space: nowrap;
+}
+
+.rest-order-btn:hover {
+  background: #226035;
+}

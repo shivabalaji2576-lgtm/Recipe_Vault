@@ -1,13 +1,12 @@
 import { useState, useEffect, useContext } from "react";
-import {
-  Ctx, API, DAYS, SHORT, MEAL_TYPES, MEAL_ICONS,
-} from "../constants";
+import { Ctx } from "../../context";
+import { API, DAYS, SHORT, MEAL_TYPES, MEAL_ICONS } from "../../config";
 
 /* ═══════════════════════════
    PLANNER PAGE  –  Component 3a
 ═══════════════════════════ */
 export default function PlannerPage() {
-  const { nav, mealPlan, clearSlot, autoOn, setAutoOn, autoOrderToday } = useContext(Ctx);
+  const { nav, mealPlan, clearSlot, autoOn, saveAutoOn, autoOrderToday } = useContext(Ctx);
   const [autoMsg, setAutoMsg] = useState("");
   const di        = new Date().getDay();
   const todayName = DAYS[di === 0 ? 6 : di - 1];
@@ -52,9 +51,14 @@ export default function PlannerPage() {
         <div className="auto-order-right">
           <div className="auto-toggle-row">
             <span className="auto-toggle-label">Auto-Order</span>
-            <div className={`auto-toggle${autoOn ? " auto-toggle-on" : ""}`} onClick={() => setAutoOn(!autoOn)}>
+            <button
+              className={`auto-toggle${autoOn ? " auto-toggle-on" : ""}`}
+              onClick={() => saveAutoOn(!autoOn)}
+              aria-label={`Auto-order is ${autoOn ? "on" : "off"}, click to toggle`}
+              aria-pressed={autoOn}
+            >
               <div className="auto-toggle-thumb" />
-            </div>
+            </button>
           </div>
           <button className="auto-order-btn" onClick={handleAutoOrder}>🤖 Order Today's Meals</button>
         </div>
@@ -94,18 +98,29 @@ export default function PlannerPage() {
                   return (
                     <td key={day} className={`tt-meal-cell${day === todayName ? " tt-today-col" : ""}`}>
                       {m ? (
-                        <div className="tt-meal-card" onClick={() => nav("detail", m.idMeal)}>
-                          <img src={m.strMealThumb} alt={m.strMeal} className="tt-meal-img"
-                            onError={e => { e.target.src = "https://placehold.co/120x72/e8f5e8/2a7040?text=Meal"; }} />
-                          <p className="tt-meal-name">{m.strMeal}</p>
-                          <button className="tt-remove-btn"
-                            onClick={e => { e.stopPropagation(); clearSlot(day, type); }}>×</button>
+                        <div className="tt-meal-card">
+                          <button
+                            type="button"
+                            className="tt-meal-card-btn"
+                            onClick={() => nav("detail", m.idMeal)}
+                            aria-label={`View recipe details for ${m.strMeal} (${day} ${type})`}
+                          >
+                            <img src={m.strMealThumb} alt="" className="tt-meal-img"
+                              onError={e => { e.target.src = "https://placehold.co/120x72/e8f5e8/2a7040?text=Meal"; }} />
+                            <p className="tt-meal-name">{m.strMeal}</p>
+                          </button>
+                          <button
+                            type="button"
+                            className="tt-remove-btn"
+                            onClick={() => clearSlot(day, type)}
+                            aria-label={`Remove ${m.strMeal} from ${day} ${type}`}
+                          >×</button>
                         </div>
                       ) : (
-                        <div className="tt-empty-slot" onClick={() => nav("home")}>
+                        <button className="tt-empty-slot" onClick={() => nav("home")} aria-label={`Add ${type} for ${day}`}>
                           <span className="tt-plus">+</span>
                           <span className="tt-add-label">Add meal</span>
-                        </div>
+                        </button>
                       )}
                     </td>
                   );

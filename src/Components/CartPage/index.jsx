@@ -1,5 +1,7 @@
 import { useState, useEffect, useContext } from "react";
-import { Ctx, fmt, getPrice, DELIVERY } from "../constants";
+import { Ctx } from "../../context";
+import { fmt, getPrice } from "../../helpers";
+import { DELIVERY } from "../../config";
 
 /* ═══════════════════════════
    PAYMENT METHODS CONFIG
@@ -178,7 +180,7 @@ export function CartDrawer() {
     const fn = e => { if (e.key === "Escape") { setShowPayment(false); setCartOpen(false); } };
     window.addEventListener("keydown", fn);
     return () => window.removeEventListener("keydown", fn);
-  }, []);
+  }, [setCartOpen]);
 
   const handlePaymentSelect = method => {
     setAppliedMethod(method);

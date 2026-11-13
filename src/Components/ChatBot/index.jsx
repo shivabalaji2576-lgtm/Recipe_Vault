@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { CHATBOT_READY, GEMINI_API_KEY, GEMINI_MODEL } from "../constants";
+import { CHATBOT_READY } from "../../config";
 
 /* ═══════════════════════════
    CHATBOT  –  Component 8
@@ -107,16 +107,7 @@ export default function ChatBot({ auth }) {
     return `🤔 Try asking:\n🛒 "How does the cart work?"\n🍛 "Best biryani in Hyderabad"\n📅 "How do I use the planner?"\n💰 "What is the delivery charge?"\n🧄 "Can I order individual ingredients?"`;
   };
 
-  const SYSTEM_PROMPT = `You are a friendly and helpful food assistant for RecipeVault, a healthy meal delivery app in Hyderabad, India. Help users with:
-- Recipes, cooking tips, and ingredient suggestions
-- Cart & ordering: users tap "Add to Cart" on recipe cards, a cart drawer slides in from the right, they tap "Place Order" to confirm
-- Ingredient ordering: on recipe detail pages, users can add individual ingredients to cart with the 🛒 button on each ingredient chip, or add all ingredients at once with the "Order All Ingredients" button
-- Meal planning (Breakfast, Lunch, Dinner for each day of the week)
-- Nutrition and healthy eating advice
-- Hyderabad cuisine: biryani, haleem, mirchi ka salan, qubani ka meetha, etc.
-- Restaurants: Paradise Biryani ⭐4.8, Chutneys ⭐4.6, Bawarchi ⭐4.5, Hotel Shadab ⭐4.7, Eat Street ⭐4.3, Ohri's Dum Pukht ⭐4.4
-- Prices: ₹149–₹649 per meal, ₹29–₹119 per ingredient, ₹49 flat delivery, 30–45 min ETA, Hyderabad only
-The user's name is ${auth?.name || "there"}. Keep responses concise, warm, and helpful. Use emojis occasionally.`;
+  const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
 
   const send = async () => {
     const text = input.trim();
@@ -126,8 +117,8 @@ The user's name is ${auth?.name || "there"}. Keep responses concise, warm, and h
     setMessages(history);
     setLoading(true);
 
-    /* Fallback mode (no API key) */
-    if (!CHATBOT_READY || !GEMINI_API_KEY || GEMINI_API_KEY.includes("AIzaSyB9UaPgK8PF_hFxktSltXzdXzdc67p2c0c")) {
+    /* Fallback mode when chatbot is disabled */
+    if (!CHATBOT_READY) {
       await new Promise(r => setTimeout(r, 500));
       setMessages(prev => [...prev, { role: "assistant", text: getFallback(text) }]);
       if (!open) triggerPulse();
@@ -135,38 +126,26 @@ The user's name is ${auth?.name || "there"}. Keep responses concise, warm, and h
       return;
     }
 
-    /* Gemini API */
-    const contents = history
-      .filter((_, i) => !(i === 0 && history[0].role === "assistant"))
-      .map(m => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.text }] }));
-
     try {
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
-      const res = await fetch(endpoint, {
+      const res = await fetch(`${BACKEND_URL}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-          contents,
-          generationConfig: { maxOutputTokens: 800, temperature: 0.7 },
-        }),
+        body: JSON.stringify({ message: text, history }),
       });
+
       if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        const errMsg = errData?.error?.message || `API error ${res.status}`;
-        setMessages(prev => [...prev, { role: "assistant", text: `⚠️ ${errMsg}\n\n${getFallback(text)}` }]);
-        setLoading(false);
+        setMessages(prev => [...prev, { role: "assistant", text: getFallback(text) }]);
+        if (!open) triggerPulse();
         return;
       }
+
       const data = await res.json();
-      const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      const reply = data?.reply;
       setMessages(prev => [...prev, { role: "assistant", text: reply?.trim() || getFallback(text) }]);
       if (!open) triggerPulse();
     } catch {
-      setMessages(prev => [...prev, {
-        role: "assistant",
-        text: `🌐 Could not reach Gemini. Check your API key or internet.\n\n${getFallback(text)}`,
-      }]);
+      setMessages(prev => [...prev, { role: "assistant", text: getFallback(text) }]);
+      if (!open) triggerPulse();
     } finally {
       setLoading(false);
     }

@@ -1,8 +1,11 @@
-import { useState, useEffect, useContext } from "react";
+import { useState, useEffect, useContext, useCallback } from "react";
+import { Ctx } from "../../context";
 import {
-  Ctx, API, HC, LOAD_CATS, DAYS, MEAL_TYPES, MEAL_ICONS,
-  DELIVERY, fmt, getPrice, getIngredientPrice, useDebounce,
-} from "../constants";
+  API, HC, LOAD_CATS, DAYS, MEAL_TYPES, MEAL_ICONS, DELIVERY,
+} from "../../config";
+import { fmt, getPrice, getIngredientPrice } from "../../helpers";
+import { useDebounce } from "../../hooks/useDebounce";
+import { fetchIngredientSubstitutes } from "../../services/substitution";
 
 /* ═══════════════════════════
    EXPLORE PAGE  –  Component 2
@@ -19,7 +22,7 @@ export default function ExplorePage() {
   const dq = useDebounce(query, 380);
   const cartCount = cart.reduce((s, c) => s + c.qty, 0);
 
-  const loadDefault = async () => {
+  const loadDefault = useCallback(async () => {
     setLoading(true); setErrMsg("");
     try {
       const all = await Promise.all(
@@ -33,56 +36,45 @@ export default function ExplorePage() {
       setMeals(combined);
     } catch { setErrMsg("Failed to load recipes."); }
     finally { setLoading(false); }
-  };
+  }, []);
+
+  // Single unified effect keyed on (dq, selCat).
+  // Branches: category filter → search → default load (mutually exclusive).
+  useEffect(() => {
+    let cancelled = false;
+
+    const run = async () => {
+      if (selCat) {
+        setLoading(true); setErrMsg("");
+        try {
+          const r = await fetch(`${API}/filter.php?c=${encodeURIComponent(selCat)}`);
+          const d = await r.json();
+          if (!cancelled) { setMeals(d.meals || []); setLoading(false); }
+        } catch {
+          if (!cancelled) { setErrMsg("Failed to load category recipes."); setLoading(false); }
+        }
+      } else if (dq.trim()) {
+        setLoading(true); setErrMsg("");
+        try {
+          const r = await fetch(`${API}/search.php?s=${encodeURIComponent(dq)}`);
+          const d = await r.json();
+          if (!cancelled) { setMeals(d.meals || []); setLoading(false); }
+        } catch {
+          if (!cancelled) { setErrMsg("Search failed."); setLoading(false); }
+        }
+      } else {
+        await loadDefault();
+      }
+    };
+
+    run();
+    return () => { cancelled = true; };
+  }, [dq, selCat, loadDefault]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadDefault();
     fetch(`${API}/categories.php`).then(r => r.json())
       .then(d => setCats(d.categories || [])).catch(() => {});
   }, []);
-
-  useEffect(() => {
-    if (!dq.trim()) {
-      if (!selCat) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        loadDefault();
-      }
-      return;
-    }
-    const doSearch = async () => {
-      setLoading(true); setErrMsg("");
-      try {
-        const r = await fetch(`${API}/search.php?s=${encodeURIComponent(dq)}`);
-        const d = await r.json();
-        setMeals(d.meals || []); setLoading(false);
-      } catch {
-        setErrMsg("Search failed."); setLoading(false);
-      }
-    };
-    doSearch();
-  }, [dq, selCat]);
-
-  useEffect(() => {
-    if (!selCat) {
-      if (!query) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        loadDefault();
-      }
-      return;
-    }
-    const doFilter = async () => {
-      setLoading(true);
-      try {
-        const r = await fetch(`${API}/filter.php?c=${encodeURIComponent(selCat)}`);
-        const d = await r.json();
-        setMeals(d.meals || []); setLoading(false);
-      } catch {
-        setLoading(false);
-      }
-    };
-    doFilter();
-  }, [selCat, query]);
 
   const display = healthy ? meals.filter(m => !m.strCategory || HC.includes(m.strCategory)) : meals;
 
@@ -94,10 +86,10 @@ export default function ExplorePage() {
         <p className="hero-p">Add dishes to your cart · order together · email confirmation · Hyderabad delivery.</p>
 
         {cartCount > 0 && (
-          <div className="explore-cart-bar" onClick={() => setCartOpen(true)}>
+          <button className="explore-cart-bar" onClick={() => setCartOpen(true)} aria-label={`${cartCount} item${cartCount !== 1 ? 's' : ''} in cart, click to view`}>
             <span className="ecb-left">🛒 <strong>{cartCount} item{cartCount !== 1 ? "s" : ""}</strong> in your cart</span>
             <span className="ecb-right">View Cart →</span>
-          </div>
+          </button>
         )}
 
         <div className="search-box">
@@ -247,6 +239,14 @@ export function DetailPage({ mealId }) {
   const [flash,    setFlash]    = useState("");
   const [ingFlash, setIngFlash] = useState({});
 
+  /* ── Ingredient Substitution States (Option A) ── */
+  const [subModalIng, setSubModalIng] = useState(null);
+  const [substitutes, setSubstitutes] = useState([]);
+  const [subLoading, setSubLoading] = useState(false);
+  const [activeDietFilter, setActiveDietFilter] = useState("All");
+  const [swappedIngs, setSwappedIngs] = useState({});
+  const [subFlash, setSubFlash] = useState("");
+
   useEffect(() => {
     const fetchMeal = async () => {
       setLoading(true);
@@ -307,6 +307,50 @@ export function DetailPage({ mealId }) {
     setTimeout(() => setCartOpen(true), 350);
   };
 
+  /* ── Substitution Handlers (Option A) ── */
+  const openSubstitutes = async (ing) => {
+    setSubModalIng(ing);
+    setSubLoading(true);
+    setActiveDietFilter("All");
+    try {
+      const subs = await fetchIngredientSubstitutes(ing.n);
+      setSubstitutes(subs || []);
+    } catch {
+      setSubstitutes([]);
+    } finally {
+      setSubLoading(false);
+    }
+  };
+
+  const applySwapToRecipe = (sub) => {
+    if (!subModalIng) return;
+    setSwappedIngs((prev) => ({
+      ...prev,
+      [subModalIng.n]: { substitute: sub.substitute, ratio: sub.ratio },
+    }));
+    setSubModalIng(null);
+  };
+
+  const addSubstituteToCart = (sub) => {
+    if (!subModalIng) return;
+    const subPrice = getIngredientPrice(sub.substitute);
+    const subMeal = {
+      idMeal: `sub_${meal.idMeal}_${sub.substitute.replace(/\s+/g, "_").toLowerCase()}`,
+      strMeal: `${sub.substitute} (Sub for ${subModalIng.n})`,
+      strMealThumb: `https://www.themealdb.com/images/ingredients/${encodeURIComponent(sub.substitute)}.png`,
+      strCategory: "Ingredient",
+      price: subPrice,
+    };
+    addToCart(subMeal);
+    setSubFlash(sub.substitute);
+    setTimeout(() => setSubFlash(""), 2200);
+  };
+
+  const filteredSubstitutes = substitutes.filter((s) => {
+    if (activeDietFilter === "All") return true;
+    return s.dietary?.some((d) => d.toLowerCase().includes(activeDietFilter.toLowerCase()));
+  });
+
   return (
     <div className="detail-page">
       <button className="back-btn" onClick={() => nav("home")}>← Back to Explore</button>
@@ -339,10 +383,10 @@ export function DetailPage({ mealId }) {
           <p className="detail-price">{fmt(price)} <span className="detail-delivery">+ {fmt(DELIVERY)} delivery</span></p>
 
           {cartItem && (
-            <div className="detail-in-cart-bar" onClick={() => setCartOpen(true)}>
+            <button className="detail-in-cart-bar" onClick={() => setCartOpen(true)} aria-label="View cart">
               🛒 <strong>{cartItem.qty}×</strong> already in your cart —{" "}
               <span className="dicb-link">View Cart →</span>
-            </div>
+            </button>
           )}
 
           <div className="detail-actions">
@@ -389,27 +433,49 @@ export function DetailPage({ mealId }) {
               <h3 className="ing-title">Ingredients <span className="ing-count">({ings.length} items)</span></h3>
               <button className="ing-order-all-btn" onClick={addAllIngredients}>🛒 Order All Ingredients</button>
             </div>
+            <div className="ing-sub-banner">
+              <span>💡</span>
+              <span>Missing an ingredient? Tap <strong>⇄</strong> on any item to view curated rule & embedding substitutions.</span>
+            </div>
             <div className="ing-grid">
               {ings.map(({ n, m }, i) => {
                 const flashed  = !!ingFlash[n];
-                const ingPrice = getIngredientPrice(n);
+                const swap = swappedIngs[n];
+                const displayName = swap ? swap.substitute : n;
+                const displayMeasure = swap ? swap.ratio : m;
+                const ingPrice = getIngredientPrice(displayName);
                 return (
-                  <div key={i} className={`ing-chip ing-chip-orderable${flashed ? " ing-chip-flashed" : ""}`}>
+                  <div key={i} className={`ing-chip ing-chip-orderable${flashed ? " ing-chip-flashed" : ""}${swap ? " ing-chip-swapped" : ""}`}>
                     <img
-                      src={`https://www.themealdb.com/images/ingredients/${encodeURIComponent(n)}-Small.png`}
-                      alt={n} className="ing-img"
+                      src={`https://www.themealdb.com/images/ingredients/${encodeURIComponent(displayName)}-Small.png`}
+                      alt={displayName} className="ing-img"
                       onError={e => { e.target.style.display = "none"; }} />
                     <div className="ing-text">
-                      <span className="ing-name">{n}</span>
-                      {m && <span className="ing-measure">{m}</span>}
+                      <span className="ing-name">
+                        {displayName}
+                        {swap && <span className="ing-swap-indicator"> (⇄ {n})</span>}
+                      </span>
+                      {displayMeasure && <span className="ing-measure">{displayMeasure}</span>}
                       <span className="ing-price-tag">{fmt(ingPrice)}</span>
                     </div>
-                    <button
-                      className={`ing-add-btn${flashed ? " ing-add-btn-done" : ""}`}
-                      onClick={() => addIngredientToCart({ n, m })}
-                      title={`Add ${n} to cart`}>
-                      {flashed ? "✓" : "🛒"}
-                    </button>
+                    <div className="ing-actions-group">
+                      <button
+                        type="button"
+                        className="ing-sub-btn"
+                        onClick={() => openSubstitutes({ n, m })}
+                        title={`Find substitutes for ${n}`}
+                        aria-label={`Find substitutes for ${n}`}>
+                        ⇄
+                      </button>
+                      <button
+                        type="button"
+                        className={`ing-add-btn${flashed ? " ing-add-btn-done" : ""}`}
+                        onClick={() => addIngredientToCart({ n: displayName, m: displayMeasure })}
+                        title={`Add ${displayName} to cart`}
+                        aria-label={`Add ${displayName} to cart`}>
+                        {flashed ? "✓" : "🛒"}
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -430,6 +496,142 @@ export function DetailPage({ mealId }) {
           ))}
         </div>
       </div>
+
+      {/* ── Substitution Modal (Option A) ── */}
+      {subModalIng && (
+        <div className="sub-modal-backdrop" onClick={() => setSubModalIng(null)}>
+          <div className="sub-modal-card" onClick={e => e.stopPropagation()}>
+            <div className="sub-modal-header">
+              <div className="sub-modal-header-left">
+                <img
+                  src={`https://www.themealdb.com/images/ingredients/${encodeURIComponent(subModalIng.n)}-Small.png`}
+                  alt={subModalIng.n}
+                  className="sub-modal-source-img"
+                  onError={e => { e.target.style.display = "none"; }}
+                />
+                <div>
+                  <div className="sub-modal-tagline">Ingredient Substitution (Option A)</div>
+                  <h2 className="sub-modal-title">Substitutes for {subModalIng.n}</h2>
+                  {subModalIng.m && (
+                    <p className="sub-modal-source-measure">
+                      Recipe quantity: <strong>{subModalIng.m}</strong>
+                    </p>
+                  )}
+                </div>
+              </div>
+              <button
+                type="button"
+                className="sub-modal-close"
+                onClick={() => setSubModalIng(null)}
+                aria-label="Close substitutes modal"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="sub-modal-info-banner">
+              <span>💡</span>
+              <span>
+                Suggestions powered by <strong>curated culinary rules</strong> (e.g. butter → olive oil) +{" "}
+                <strong>12D ingredient vector embeddings</strong> (cosine similarity).
+              </span>
+            </div>
+
+            <div className="sub-diet-filters">
+              {["All", "Vegan", "Dairy-Free", "Gluten-Free", "High-Protein", "Low-Carb", "Keto"].map(f => (
+                <button
+                  key={f}
+                  type="button"
+                  className={`sub-diet-pill${activeDietFilter === f ? " sub-diet-pill-on" : ""}`}
+                  onClick={() => setActiveDietFilter(f)}
+                  aria-pressed={activeDietFilter === f}
+                >
+                  {f}
+                </button>
+              ))}
+            </div>
+
+            <div className="sub-list">
+              {subLoading ? (
+                <div className="sub-loading">
+                  <div className="spinner" />
+                </div>
+              ) : filteredSubstitutes.length === 0 ? (
+                <div className="sub-empty">No substitutes match the "{activeDietFilter}" filter.</div>
+              ) : (
+                filteredSubstitutes.map((sub, idx) => {
+                  const subPrice = getIngredientPrice(sub.substitute);
+                  const isFlashed = subFlash === sub.substitute;
+                  const isCurrentlySwapped = swappedIngs[subModalIng.n]?.substitute === sub.substitute;
+
+                  return (
+                    <div key={idx} className={`sub-item-card${isCurrentlySwapped ? " sub-item-active-swap" : ""}`}>
+                      <div className="sub-item-top">
+                        <div className="sub-item-main">
+                          <img
+                            src={`https://www.themealdb.com/images/ingredients/${encodeURIComponent(sub.substitute)}-Small.png`}
+                            alt={sub.substitute}
+                            className="sub-item-img"
+                            onError={e => { e.target.style.display = "none"; }}
+                          />
+                          <div>
+                            <div className="sub-item-title-row">
+                              <h4 className="sub-item-name">{sub.substitute}</h4>
+                              <span
+                                className={`sub-badge ${
+                                  sub.matchType === "Curated Rule" ? "sub-badge-rule" : "sub-badge-embed"
+                                }`}
+                              >
+                                {sub.matchType === "Curated Rule"
+                                  ? "⭐ Curated Rule"
+                                  : `🧬 Embedding Match (${Math.round((sub.confidence || 0.8) * 100)}%)`}
+                              </span>
+                            </div>
+                            <div className="sub-item-ratio">
+                              <span className="sub-ratio-icon">⇄</span>
+                              <span><strong>Ratio:</strong> {sub.ratio}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="sub-item-price">{fmt(subPrice)}</div>
+                      </div>
+
+                      {sub.dietary && sub.dietary.length > 0 && (
+                        <div className="sub-diet-badges">
+                          {sub.dietary.map(d => (
+                            <span key={d} className="sub-diet-badge">✓ {d}</span>
+                          ))}
+                        </div>
+                      )}
+
+                      <p className="sub-item-note">{sub.note}</p>
+
+                      <div className="sub-item-actions">
+                        <button
+                          type="button"
+                          className={`sub-btn-swap${isCurrentlySwapped ? " sub-btn-swapped" : ""}`}
+                          onClick={() => applySwapToRecipe(sub)}
+                          aria-label={`Swap ${sub.substitute} into recipe`}
+                        >
+                          {isCurrentlySwapped ? "✓ Active in Recipe" : "⇄ Swap in Recipe"}
+                        </button>
+                        <button
+                          type="button"
+                          className={`sub-btn-cart${isFlashed ? " sub-btn-cart-done" : ""}`}
+                          onClick={() => addSubstituteToCart(sub)}
+                          aria-label={`Add ${sub.substitute} to cart`}
+                        >
+                          {isFlashed ? "✓ Added to Cart!" : `🛒 Add to Cart (${fmt(subPrice)})`}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
